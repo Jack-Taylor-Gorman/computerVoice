@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Voice Dataset Builder</title>
+    <style>
+      :root {
+        --bg: #ffffff;
+        --fg: #111111;
+        --mute: #666666;
+        --line: #e6e6e6;
+        --accent: #EE6300;
+        --accent-soft: #fff1e6;
+        --ok: #EE6300;
+        --bad: #111111;
+        --radius: 14px;
+        --radius-sm: 10px;
+      }
+      * { box-sizing: border-box; }
+      html, body, #root { height: 100%; margin: 0; }
+      body {
+        background: var(--bg);
+        color: var(--fg);
+        font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", system-ui, sans-serif;
+        font-size: 14px;
+        letter-spacing: -0.005em;
+      }
+      a { color: var(--accent); text-decoration: none; }
+      a:hover { text-decoration: underline; }
+      h1, h2, h3 { font-weight: 600; letter-spacing: -0.02em; margin: 0 0 12px; }
+      h3 { font-size: 16px; }
+
+      button, select, input, textarea {
+        background: #ffffff;
+        color: var(--fg);
+        border: 1px solid var(--line);
+        padding: 8px 14px;
+        font-family: inherit;
+        font-size: 14px;
+        border-radius: var(--radius-sm);
+        outline: none;
+        transition: border-color .12s, background .12s, transform .06s;
+      }
+      input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+      textarea { font-family: ui-monospace, "SF Mono", "JetBrains Mono", monospace; resize: vertical; }
+      button { cursor: pointer; }
+      button:hover { background: var(--accent-soft); border-color: var(--accent); }
+      button:active { transform: scale(0.985); }
+      button.primary { background: var(--accent); color: #ffffff; border-color: var(--accent); }
+      button.primary:hover { background: #d85700; border-color: #d85700; }
+      button.reject { background: #ffffff; color: var(--fg); border-color: #d0d0d0; }
+      button.approved { background: var(--accent); color: #ffffff; border-color: var(--accent); }
+      button.ghost { background: transparent; border: 1px solid var(--line); }
+
+      table { width: 100%; border-collapse: separate; border-spacing: 0; }
+      thead th {
+        text-align: left; font-weight: 500; color: var(--mute); font-size: 12px;
+        text-transform: uppercase; letter-spacing: 0.06em; padding: 10px 12px;
+        border-bottom: 1px solid var(--line); background: #fafafa;
+      }
+      tbody td { padding: 10px 12px; border-bottom: 1px solid var(--line); }
+      tbody tr:hover { background: var(--accent-soft); }
+      tbody tr:first-child td:first-child { border-top-left-radius: var(--radius); }
+      tbody tr:first-child td:last-child { border-top-right-radius: var(--radius); }
+
+      .card {
+        background: #ffffff;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 16px;
+      }
+      .pill {
+        display: inline-block; padding: 2px 10px; border-radius: 999px;
+        border: 1px solid var(--line); font-size: 12px; color: var(--mute);
+      }
+      .pill.on { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+
+      nav.top {
+        display: flex; align-items: center; gap: 18px; padding: 12px 20px;
+        border-bottom: 1px solid var(--line); background: #ffffff;
+      }
+      nav.top .brand {
+        font-weight: 700; letter-spacing: -0.03em; font-size: 15px;
+        padding: 6px 12px; border-radius: 999px;
+        background: var(--accent); color: #ffffff;
+      }
+      nav.top a { color: var(--fg); padding: 6px 10px; border-radius: var(--radius-sm); }
+      nav.top a:hover { background: var(--accent-soft); color: var(--accent); text-decoration: none; }
+      nav.top a.active { background: var(--accent-soft); color: var(--accent); }
+
+      .hint { color: var(--mute); font-size: 12px; }
+      label { display: block; color: var(--mute); font-size: 12px; margin: 8px 0 4px; text-transform: uppercase; letter-spacing: 0.04em; }
+
+      ::selection { background: var(--accent); color: #ffffff; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

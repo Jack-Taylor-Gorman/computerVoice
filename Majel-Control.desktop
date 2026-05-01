@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Majel Control
+Comment=Volume, background music, and service controls for the Majel voice system
+Exec=/home/jackgorman/Desktop/Claude_Projects/computerVoice/venv/bin/python /home/jackgorman/Desktop/Claude_Projects/computerVoice/majel_gui.py
+Icon=multimedia-volume-control
+Terminal=false
+Categories=AudioVideo;Audio;Settings;
+StartupNotify=true

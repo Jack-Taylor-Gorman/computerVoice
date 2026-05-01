@@ -1,0 +1,54 @@
+# ── Python ────────────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ── Virtualenv ────────────────────────────────────────────────────────
+venv/
+.venv/
+env/
+
+# ── Node ──────────────────────────────────────────────────────────────
+node_modules/
+trekdata/web/dist/
+trekdata/web/node_modules/
+
+# ── Local config / secrets ────────────────────────────────────────────
+.env
+.env.*
+*.env
+*.key
+*.pem
+*.credentials.json
+.background.pid
+
+# ── Generated / runtime data ──────────────────────────────────────────
+storage/
+*.sqlite
+*.sqlite-journal
+
+# ── Datasets and audio assets (large + redistributable separately) ────
+dataset/
+sounds/
+Majel/
+
+# ── Logs ──────────────────────────────────────────────────────────────
+*.log
+
+# ── OS / editor cruft ─────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+*~

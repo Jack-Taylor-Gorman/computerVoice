@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Claude (Majel)
+Comment=Launch Claude Code with Majel voice + instant approval chime
+Exec=gnome-terminal -- /home/jackgorman/Desktop/Claude_Projects/computerVoice/start_claude.sh
+Icon=utilities-terminal
+Terminal=false
+Categories=Development;Utility;
+StartupNotify=true
