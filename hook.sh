@@ -13,14 +13,18 @@ TRANSCRIPT="$(printf '%s' "$PAYLOAD" | "$DIR/venv/bin/python" -c 'import json,sy
 [ -z "$TRANSCRIPT" ] || [ ! -f "$TRANSCRIPT" ] && exit 0
 
 TEXT="$("$DIR/venv/bin/python" - "$TRANSCRIPT" <<'PY'
-# Extract ONLY the last text block from the last assistant message.
+# Extract every text block from the last assistant message and join
+# them so computerize.py (API mode) can synthesize a single Majel-style
+# synopsis of the entire reply.
 #
-# Why: an assistant turn often contains multiple text blocks separated by
-# tool-use blocks (e.g., "I'll try X" → tool-call → "got error" → tool-call
-# → "done"). Joining all of them feeds intermediate-error language into the
-# rewriter, which may then voice the error instead of the final state.
-# The LAST text block is the post-resolution summary the model wrote AFTER
-# seeing the final tool result, so it reflects the actual ending condition.
+# Why this changed: previous logic took only the LAST text block to
+# avoid voicing intermediate-error language. But assistants often emit
+# the substantive content first ("Here is what I did. <table>") then a
+# short final status line ("Receiver up — PID 1490675.") — taking only
+# the last block loses everything except the trailing status.
+# Computerize.py's invariant 18 already instructs the rewriter to
+# report the FINAL state and skip discarded intermediate failures, so
+# joining all blocks is safe — the LLM filters them.
 import json, sys
 path = sys.argv[1]
 last = ""
@@ -33,14 +37,14 @@ with open(path) as f:
         if o.get("type") != "assistant":
             continue
         msg = o.get("message", {})
-        last_text_in_msg = ""
+        blocks: list[str] = []
         for c in msg.get("content", []) or []:
             if isinstance(c, dict) and c.get("type") == "text":
                 t = (c.get("text") or "").strip()
                 if t:
-                    last_text_in_msg = t
-        if last_text_in_msg:
-            last = last_text_in_msg
+                    blocks.append(t)
+        if blocks:
+            last = "\n\n".join(blocks)
 print(last)
 PY
 )"

@@ -472,6 +472,21 @@ ACRONYMS: dict[str, str] = {
     "TS": "TypeScript",
     "RPC": "remote procedure call",
     "gRPC": "G remote procedure call",
+    # Process / system identifiers — F5 reads "PID" as the single syllable
+    # "pid" otherwise; spelling out the meaning matches how the computer
+    # would naturally name it.
+    "PID": "process I D",
+    "TID": "thread I D",
+    "UID": "user I D",
+    "GID": "group I D",
+    "PPID": "parent process I D",
+    "SIGTERM": "sig-term",
+    "SIGINT": "sig-int",
+    "SIGKILL": "sig-kill",
+    "stdin": "standard input",
+    "stdout": "standard output",
+    "stderr": "standard error",
+    "I/O": "input output",
     # Apple platforms — F5 reads "macOS"/"iOS" as one slurred token because
     # the lowercase prefix glues to the uppercase "OS". Forcing a space and
     # spelling the OS letters separately matches how Apple themselves say
