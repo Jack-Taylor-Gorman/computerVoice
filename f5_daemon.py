@@ -51,7 +51,7 @@ REF_TEXT = os.environ.get("MAJEL_F5_REFTEXT", "Accessing Library Computer Data")
 
 # Global speed multiplier passed to F5TTS.infer(). 0.9 = 10% slower, which
 # adds a touch of LCARS "deliberate" cadence without dragging the audio.
-SPEED = float(os.environ.get("MAJEL_F5_SPEED", "0.85"))
+SPEED = float(os.environ.get("MAJEL_F5_SPEED", "0.7"))
 
 # Inference is heavyweight + holds the GPU; serialize.
 _lock = threading.Lock()
