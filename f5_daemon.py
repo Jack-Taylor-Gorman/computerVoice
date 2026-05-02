@@ -51,7 +51,7 @@ REF_TEXT = os.environ.get("MAJEL_F5_REFTEXT", "Accessing Library Computer Data")
 
 # Global speed multiplier passed to F5TTS.infer(). 0.9 = 10% slower, which
 # adds a touch of LCARS "deliberate" cadence without dragging the audio.
-SPEED = float(os.environ.get("MAJEL_F5_SPEED", "0.9"))
+SPEED = float(os.environ.get("MAJEL_F5_SPEED", "0.85"))
 
 # Inference is heavyweight + holds the GPU; serialize.
 _lock = threading.Lock()
@@ -83,13 +83,16 @@ def handle(conn: socket.socket, f5: F5TTS) -> None:
             conn.sendall(b'{"ok": false, "err": "empty text"}\n')
             return
         with _lock:
+            # remove_silence=True over-trims one-word utterances ("Example.")
+            # so the actual word gets cut. Leave the natural tail silence in
+            # place — paplay handles it fine and short clips stay intact.
             f5.infer(
                 ref_file=str(REF_AUDIO),
                 ref_text=REF_TEXT,
                 gen_text=text,
                 file_wave=dst,
                 show_info=lambda *a, **k: None,
-                remove_silence=True,
+                remove_silence=False,
                 speed=SPEED,
             )
         conn.sendall(b'{"ok": true}\n')

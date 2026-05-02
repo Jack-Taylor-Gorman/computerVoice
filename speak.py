@@ -45,6 +45,36 @@ def restore_background() -> None:
     _signal_bg(_signal.SIGUSR2)
 
 
+def _mic_in_use() -> bool:
+    """Return True if anything is currently recording from the default
+    PulseAudio source (i.e. the user's mic is being captured — most
+    likely a chat-mode speech-to-text session). When this is True we
+    skip the utterance entirely so Majel doesn't bleed into the user's
+    dictation. Disable via MAJEL_IGNORE_MIC=1.
+    """
+    if os.environ.get("MAJEL_IGNORE_MIC") == "1":
+        return False
+    try:
+        # `pactl list short source-outputs` lists every active capture
+        # client. An empty list means nothing is recording.
+        r = subprocess.run(
+            ["pactl", "list", "short", "source-outputs"],
+            capture_output=True, text=True, timeout=2,
+        )
+        for line in (r.stdout or "").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            # Skip our own monitor sources (e.g. background.py reading the
+            # output monitor for the duck/restore behaviour).
+            if "monitor" in line.lower():
+                continue
+            return True
+        return False
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        return False
+
+
 def infer_via_daemon(src: str, dst: str, timeout: float = 60.0) -> bool:
     """Send inference request to majel_daemon (RVC). Returns True on success."""
     if not os.path.exists(DAEMON_SOCK):
@@ -249,6 +279,16 @@ def main() -> int:
     if not text:
         return 0
     text = text[:MAX_CHARS]
+
+    # Halt-during-STT: if the user is recording right now (chat speech-to-
+    # text, voice notes, etc.), bail silently so Majel doesn't talk over
+    # them. Set MAJEL_IGNORE_MIC=1 to disable this guard.
+    if _mic_in_use():
+        dbg = os.environ.get("MAJEL_LOG")
+        if dbg:
+            with open(dbg, "a") as f:
+                f.write("skip: mic in use (likely chat STT)\n")
+        return 0
 
     # Voice every turn — no beep-only short-circuits. The rewriter guarantees
     # something speakable (as short as a single word for trivial acks).

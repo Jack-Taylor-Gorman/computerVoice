@@ -395,7 +395,9 @@ Output only the rewritten response — no explanation, no quotes, no preface, no
 # computer to drive the work forward by asking a follow-up when it would help.
 SYSTEM_PROMPT_API_SUFFIX = """
 
-You are also operating as an active collaborator. If the user's prose hints at an unfinished decision, an ambiguous next step, or a piece of missing information that would unblock progress, append exactly one short computer-speak question to drive the conversation forward (still under the 40-word cap). Use the option-enumeration form when more than one path exists. Skip the question entirely when the prose is a self-contained completion ("Test suite complete. All tests nominal." needs no follow-up)."""
+You are also operating as an active collaborator. If the user's prose hints at an unfinished decision, an ambiguous next step, or a piece of missing information that would unblock progress, append exactly one short computer-speak question to drive the conversation forward (still under the 40-word cap). Use the option-enumeration form when more than one path exists. Skip the question entirely when the prose is a self-contained completion ("Test suite complete. All tests nominal." needs no follow-up).
+
+19. When the response asks the user to specify something AND you have a recommendation or default to suggest, state the imperative FIRST and the recommendation as a SEPARATE sentence AFTER. The "Specify X." sentence always comes before the "Recommend Y." sentence. Example: "Three candidate hosts identified. Specify target host. Recommend primary on host one." — never the reverse order."""
 
 _FEW_SHOTS = [
     ("I ran the tests and they all passed", "Test suite complete. All tests nominal."),
@@ -470,6 +472,31 @@ ACRONYMS: dict[str, str] = {
     "TS": "TypeScript",
     "RPC": "remote procedure call",
     "gRPC": "G remote procedure call",
+    # Apple platforms — F5 reads "macOS"/"iOS" as one slurred token because
+    # the lowercase prefix glues to the uppercase "OS". Forcing a space and
+    # spelling the OS letters separately matches how Apple themselves say
+    # them ("mac oh ess", "eye oh ess").
+    "macOS": "Mac O S",
+    "iOS": "i O S",
+    "iPadOS": "iPad O S",
+    "watchOS": "watch O S",
+    "tvOS": "T V O S",
+    "visionOS": "vision O S",
+    # Database flavors — the SQL substring would otherwise expand inside
+    # them and produce "MyStructured Query Language". Hardcode the
+    # canonical pronunciation.
+    "PostgreSQL": "Postgres",
+    "MySQL": "My S Q L",
+    "MongoDB": "Mongo D B",
+    "MariaDB": "Maria D B",
+    "DynamoDB": "Dynamo D B",
+    # Other tech-term oddities.
+    "nginx": "engine X",
+    "LaTeX": "Lay Tech",
+    "PyPI": "pie pee eye",
+    "regex": "reg ex",
+    "WebRTC": "Web R T C",
+    "GitHub": "GitHub",  # placeholder — F5 already reads this fine; here for reference
 }
 # Pre-compile a single union regex sorted longest-first so "CI/CD" matches
 # before "CI" and "HTTPS" before "HTTP".
@@ -533,7 +560,7 @@ def _post_process(text: str) -> str:
 # Cache key includes the prompt version so meaningful prompt changes
 # invalidate prior entries automatically.
 REWRITE_CACHE = Path(__file__).resolve().parent / "dataset" / "majel_rewrites.jsonl"
-PROMPT_VERSION = "2026-05-02-v1"
+PROMPT_VERSION = "2026-05-02-v2"  # bumped with invariant 19 + macOS/iOS expansions
 
 _cache: dict[str, str] | None = None
 

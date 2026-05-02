@@ -78,13 +78,12 @@ CLEAN="$(printf '%s' "$TEXT" | "$DIR/venv/bin/python" "$DIR/strip.py" | MAJEL_PR
 [ -z "$CLEAN" ] && { echo "$(date +%H:%M:%S.%3N) empty CLEAN" >>"$LOG"; exit 0; }
 echo "$(date +%H:%M:%S.%3N) CLEAN=$CLEAN" >>"$LOG"
 
-# Skip spawning a new voice if one is already mid-synthesis/playback.
-if pgrep -f "$DIR/speak.py" >/dev/null 2>&1; then
-    echo "$(date +%H:%M:%S.%3N) SKIP: speak.py already running" >>"$LOG"
-    exit 0
-fi
-echo "$(date +%H:%M:%S.%3N) launching speak.py (XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-unset} PULSE_SERVER=${PULSE_SERVER:-unset} UID=$(id -u))" >>"$LOG"
+# Sequential playback across concurrent Claude sessions: every speak.py
+# invocation grabs an exclusive flock on /tmp/majel_speak.lock before it
+# starts. flock blocks (no -n), so utterances queue rather than overlap
+# or get dropped. The lock auto-releases when speak.py exits.
+echo "$(date +%H:%M:%S.%3N) queuing speak.py via flock" >>"$LOG"
 
-nohup bash -c "MAJEL_LOG=/tmp/majel_speak.log printf '%s' \"\$0\" | MAJEL_LOG=/tmp/majel_speak.log '$DIR/venv/bin/python' '$DIR/speak.py' >>/tmp/majel_speak.log 2>&1" "$CLEAN" </dev/null >/dev/null 2>&1 &
+nohup bash -c "MAJEL_LOG=/tmp/majel_speak.log printf '%s' \"\$0\" | MAJEL_LOG=/tmp/majel_speak.log flock /tmp/majel_speak.lock '$DIR/venv/bin/python' '$DIR/speak.py' >>/tmp/majel_speak.log 2>&1" "$CLEAN" </dev/null >/dev/null 2>&1 &
 disown
 exit 0
