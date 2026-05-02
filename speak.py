@@ -46,17 +46,16 @@ def restore_background() -> None:
 
 
 def _mic_in_use() -> bool:
-    """Return True if anything is currently recording from the default
-    PulseAudio source (i.e. the user's mic is being captured — most
-    likely a chat-mode speech-to-text session). When this is True we
-    skip the utterance entirely so Majel doesn't bleed into the user's
-    dictation. Disable via MAJEL_IGNORE_MIC=1.
+    """Return True if a real voice capture is active (e.g. chat STT).
+
+    Skips false positives from PipeWire / GNOME's internal peak-meter
+    streams which run at very low sample rates (25 Hz, 100 Hz) — those
+    are visualizers, not the user dictating. A real mic capture runs at
+    >=8 kHz. Override via MAJEL_IGNORE_MIC=1.
     """
     if os.environ.get("MAJEL_IGNORE_MIC") == "1":
         return False
     try:
-        # `pactl list short source-outputs` lists every active capture
-        # client. An empty list means nothing is recording.
         r = subprocess.run(
             ["pactl", "list", "short", "source-outputs"],
             capture_output=True, text=True, timeout=2,
@@ -65,9 +64,11 @@ def _mic_in_use() -> bool:
             line = line.strip()
             if not line:
                 continue
-            # Skip our own monitor sources (e.g. background.py reading the
-            # output monitor for the duck/restore behaviour).
             if "monitor" in line.lower():
+                continue
+            # Sample-rate filter — peak meters are <=200Hz, voice >=8kHz.
+            m = re.search(r"(\d+)\s*Hz", line)
+            if m and int(m.group(1)) < 8000:
                 continue
             return True
         return False

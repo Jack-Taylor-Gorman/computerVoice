@@ -1406,6 +1406,12 @@ class LCARSApp:
                     briefing = mb.call_claude(ctx, key, mode)
                     if briefing:
                         self._briefing_out_cache[cache_key] = briefing
+                        # Persist immediately so the user can compare later
+                        # even if speak.py never delivers audio.
+                        try:
+                            mb.save_briefing(project, mode, briefing, ctx)
+                        except OSError:
+                            pass
                 if not briefing:
                     self._briefing_status("✗ EMPTY BRIEFING")
                     self.root.after(2400, lambda: self._briefing_status("▶  TRIGGER BRIEFING"))

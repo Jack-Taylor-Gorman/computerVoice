@@ -21,15 +21,24 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+
+# Every briefing — full text + the input-context fingerprint — is appended
+# to BRIEFINGS_LOG and saved as an individual markdown so the user can
+# diff "what's changed since last time". Both files live under dataset/
+# and are gitignored by default (they may contain in-flight project prose).
+BRIEFINGS_DIR = ROOT / "dataset" / "briefings"
+BRIEFINGS_LOG = BRIEFINGS_DIR / "log.jsonl"
 
 # Project-context files we read verbatim if they exist.
 CONTEXT_FILES = [
@@ -191,6 +200,45 @@ PROMPTS = {
 }
 
 
+def save_briefing(project: Path, mode: str, briefing: str, context: str) -> Path:
+    """Persist a briefing to dataset/briefings/. Returns the markdown
+    path. Both the per-briefing markdown AND a JSONL log row are written
+    so the user can diff history later.
+
+    Markdown filename:  YYYY-MM-DDTHH-MM-SSZ_<project-slug>_<mode>.md
+    JSONL row fields:   ts, project, mode, context_hash, briefing,
+                        prompt_version, model
+    """
+    BRIEFINGS_DIR.mkdir(parents=True, exist_ok=True)
+    ts = datetime.utcnow().strftime("%Y-%m-%dT%H-%M-%SZ")
+    slug = re.sub(r"[^\w]+", "-", project.name).strip("-") or "unknown"
+    md_path = BRIEFINGS_DIR / f"{ts}_{slug}_{mode}.md"
+    ctx_hash = hashlib.sha1(context.encode("utf-8", "ignore")).hexdigest()[:12]
+
+    md_path.write_text(
+        f"# Briefing — {project.name} · {mode}\n\n"
+        f"- Generated: {ts}\n"
+        f"- Project: `{project}`\n"
+        f"- Mode: {mode}\n"
+        f"- Context fingerprint: `{ctx_hash}`\n\n"
+        f"---\n\n{briefing}\n",
+        encoding="utf-8",
+    )
+    row = {
+        "ts": ts,
+        "project": str(project),
+        "project_name": project.name,
+        "mode": mode,
+        "context_hash": ctx_hash,
+        "briefing": briefing,
+        "model": "claude-haiku-4-5-20251001",
+        "md_path": str(md_path.relative_to(ROOT)),
+    }
+    with BRIEFINGS_LOG.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(row, ensure_ascii=False) + "\n")
+    return md_path
+
+
 def call_claude(context: str, key: str, mode: str) -> str:
     from anthropic import Anthropic
     client = Anthropic(api_key=key)
@@ -268,6 +316,12 @@ def main() -> int:
 
     sys.stderr.write(f"[calling Claude — mode={args.mode}…]\n")
     briefing = call_claude(context, key, args.mode)
+    if briefing:
+        try:
+            md = save_briefing(project, args.mode, briefing, context)
+            sys.stderr.write(f"[saved → {md.relative_to(ROOT)}]\n")
+        except OSError as e:
+            sys.stderr.write(f"[save failed: {e}]\n")
     if not briefing:
         sys.stderr.write("empty briefing from Claude\n")
         return 2

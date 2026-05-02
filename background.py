@@ -107,6 +107,42 @@ def groups() -> dict[str, list[Path]]:
     return out
 
 
+# How many seconds of overlap between consecutive tracks (loop and sequence
+# modes both use this). Long-form ambient beds tolerate longer fades; the
+# fade is auto-shrunk for tracks shorter than 4× the crossfade duration.
+CROSSFADE_S = 4.0
+
+
+def _track_duration(p: Path) -> float:
+    try:
+        r = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+             "-of", "default=nokey=1:noprint_wrappers=1", str(p)],
+            capture_output=True, text=True, timeout=5,
+        )
+        return float((r.stdout or "0").strip())
+    except (FileNotFoundError, subprocess.TimeoutExpired, ValueError):
+        return 0.0
+
+
+def _spawn_ffplay(track: Path, vol: int, fade_in: float,
+                  fade_out: float, duration: float) -> subprocess.Popen:
+    """Start an ffplay child for `track` with optional fade envelopes.
+    Both fades are applied via -af afade so the audio is faded at the
+    decoder; ducking via pactl set-sink-input-volume is orthogonal."""
+    af_chain: list[str] = []
+    if fade_in > 0:
+        af_chain.append(f"afade=t=in:st=0:d={fade_in}")
+    if fade_out > 0 and duration > fade_out:
+        af_chain.append(f"afade=t=out:st={max(0, duration - fade_out):.3f}:d={fade_out}")
+    cmd = ["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet",
+           "-volume", str(vol)]
+    if af_chain:
+        cmd += ["-af", ",".join(af_chain)]
+    cmd.append(str(track))
+    return subprocess.Popen(cmd)
+
+
 def main() -> int:
     if os.environ.get("MAJEL_BG") == "0":
         return 0
@@ -131,25 +167,54 @@ def main() -> int:
     sys.stderr.flush()
     global _current
     i = 0
+    prev_proc: subprocess.Popen | None = None
     while True:
         track = tracks[i % len(tracks)]
         i += 1
-        # In random mode, reshuffle when we cycle back so order changes each lap.
         if mode == "random" and i % len(tracks) == 0 and len(tracks) > 1:
             random.shuffle(tracks)
+
+        duration = _track_duration(track)
+        # Crossfade window — full CROSSFADE_S unless the track is too
+        # short, in which case quarter-track to keep the audible content.
+        cf = min(CROSSFADE_S, max(0.0, duration / 4.0)) if duration > 0 else 0.0
+        # Fade-IN only when a prior track is still playing (i.e. we have
+        # something to overlap with). For the very first track in a
+        # session that's nothing — start clean.
+        fade_in = cf if (prev_proc is not None and prev_proc.poll() is None) else 0.0
+        fade_out = cf
+
+        start_vol = DUCK_VOLUME if _ducked else VOLUME
         try:
-            start_vol = DUCK_VOLUME if _ducked else VOLUME
-            _current = subprocess.Popen(
-                ["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet",
-                 "-volume", str(start_vol), str(track)],
-            )
-            rc = _current.wait()
-            _current = None
+            new_proc = _spawn_ffplay(track, start_vol, fade_in, fade_out, duration)
         except FileNotFoundError:
             sys.stderr.write("background: ffplay not found; exiting.\n")
             return 1
-        if rc not in (0, None):
-            time.sleep(1)
+        _current = new_proc
+
+        if duration <= 0:
+            # Couldn't probe duration — fall back to old behavior (wait
+            # for ffplay to exit) so we don't busy-loop or skip a track.
+            new_proc.wait()
+            prev_proc = None
+            continue
+
+        # Sleep until it's time to start the next track. The current
+        # track's last `cf` seconds will overlap with the next track,
+        # producing the crossfade. Skip the overlap if duration < 2*cf.
+        overlap_at = max(0.0, duration - cf)
+        # Sleep in small slices so SIGTERM / SIGINT remain responsive.
+        slept = 0.0
+        slice_s = 0.5
+        while slept < overlap_at:
+            time.sleep(min(slice_s, overlap_at - slept))
+            slept += slice_s
+            if new_proc.poll() is not None:
+                # ffplay died early — break to next iteration with a
+                # short pause so we don't tight-loop on a bad file.
+                time.sleep(0.5)
+                break
+        prev_proc = new_proc
     return 0
 
 

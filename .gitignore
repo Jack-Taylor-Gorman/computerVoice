@@ -65,3 +65,7 @@ dataset/majel_rewrites.jsonl.tmp
 # Tensorboard / training run logs.
 runs/
 ckpts/
+
+# Briefing corpus — markdown + JSONL log generated per project briefing.
+# May contain in-flight project prose; gitignored by default.
+dataset/briefings/
