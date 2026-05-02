@@ -47,7 +47,7 @@ DEFAULT_CFG = {
     "voice_enabled": True,
     "bg_enabled": True,
     "bg_group": "",
-    "bg_mode": "sequence",   # "sequence" | "loop" | "random"
+    "bg_mode": "loop",       # "sequence" | "loop" | "random"
     "bg_volume": 25,
     "duck_volume": 6,
     "enter_sound": True,
@@ -84,7 +84,7 @@ BAR_H = 32
 RAIL_W = 168
 ELBOW_R = 80
 ELBOW_H = 96                          # vertical span of top/bottom elbows
-WIN_W, WIN_H = 1100, 970
+WIN_W, WIN_H = 1100, 1180  # bumped to fit BRIEFING section without overflowing the bottom elbow
 MIN_W, MIN_H = 1000, 920
 
 CONTENT_X = RAIL_W + GUTTER + 28      # left edge of content area, well clear of elbow curve
@@ -759,14 +759,19 @@ class LCARSApp:
                                           font=self.f_label)
         y += 30
 
-        # DUCK = the percentage the background drops to while voice plays.
-        # Lower = more aggressive ducking. 50% means music is halved during
-        # voice; 0% mutes music entirely. Restored after voice finishes.
-        self.duck_var = tk.IntVar(value=self.cfg["duck_volume"])
+        # DUCK = the percentage of background volume that gets CUT while
+        # voice plays. 100% = music fully silenced during voice; 0% = no
+        # ducking. The value stored on disk (`duck_volume`) remains the
+        # *floor* (= 100 - cut) for back-compat with background.py, but
+        # the slider and readout speak in cut-amount terms because that
+        # matches user intuition ("how much do I want to cut").
+        floor = int(self.cfg.get("duck_volume", 6))
+        cut = max(0, min(100, 100 - floor))
+        self.duck_var = tk.IntVar(value=cut)
         c.create_text(x0, y + 8, anchor="nw", text="DUCK",
                       fill=LCARS["african_violet"], font=self.f_label)
         sf2 = tk.Frame(c, bg=LCARS["bg"])
-        ttk.Scale(sf2, from_=0, to=50, variable=self.duck_var,
+        ttk.Scale(sf2, from_=0, to=100, variable=self.duck_var,
                   style="LCARS.Horizontal.TScale",
                   command=lambda _: self._on_duck_change()).pack(fill="x")
         c.create_window(x0 + 134, y + 4, anchor="nw", window=sf2, width=460, height=28)
@@ -818,7 +823,7 @@ class LCARSApp:
         # restarts background.py with the corresponding MAJEL_BG_MODE env var
         # so the daemon honors the mode. The currently-active mode is shown
         # as a fully-saturated pill; inactive modes are dimmed.
-        cur_mode = self.cfg.get("bg_mode", "sequence")
+        cur_mode = self.cfg.get("bg_mode", "loop")
         self._mode_pill_specs = [
             ("sequence", "PLAY IN SEQUENCE", LCARS["bluey"],          "left"),
             ("loop",     "LOOP",             LCARS["butterscotch"],   "none"),
@@ -838,17 +843,20 @@ class LCARSApp:
             self._bg_mode_geom.append((x, y, w))
             active = (cur_mode == mode)
             if side == "none":
-                # Square segment (visual middle) — flush, no rounding.
+                # Square segment (visual middle) — flush, no rounding. Tag
+                # is content-only ("bg_mode_seg"), NOT "chrome", because
+                # _draw_chrome() deletes everything tagged "chrome" on each
+                # redraw and was wiping out the LOOP pill.
                 rect_id = c.create_rectangle(
                     x, y, x + w, y + 36,
                     fill=color if active else "#1d1d2a",
                     outline=color if active else "#1d1d2a",
-                    tags=("chrome", f"pill_bg_{mode}"))
+                    tags=("bg_mode_seg", f"pill_bg_{mode}"))
                 txt_id = c.create_text(
                     x + w / 2, y + 18, text=label,
                     fill=LCARS["bg"] if active else color,
                     font=self.f_label,
-                    tags=("chrome", f"pill_bg_{mode}"))
+                    tags=("bg_mode_seg", f"pill_bg_{mode}"))
                 # Bind click via tag.
                 c.tag_bind(f"pill_bg_{mode}", "<ButtonRelease-1>",
                            lambda e, m=mode: self._set_bg_mode(m))
@@ -1030,12 +1038,23 @@ class LCARSApp:
             return
         self._music_idx = (self._music_idx - 1) % len(self._music_groups)
         self._pills["music_current"].set_text(self._music_label_text())
+        self._apply_music_change()
 
     def _music_next(self):
         if not self._music_groups:
             return
         self._music_idx = (self._music_idx + 1) % len(self._music_groups)
         self._pills["music_current"].set_text(self._music_label_text())
+        self._apply_music_change()
+
+    def _apply_music_change(self):
+        """Persist the selected group and restart background.py so the new
+        track plays immediately. ◀/▶ no longer require a separate
+        play-mode press."""
+        cur = self._music_groups[self._music_idx]
+        self.cfg["bg_group"] = "" if cur == "(random)" else cur
+        save_cfg(self.cfg)
+        self._restart("background.py")
 
     # ── Voice mode helpers ────────────────────────────────────────────────
     def _mode_summary(self) -> str:
@@ -1243,9 +1262,13 @@ class LCARSApp:
         self.canvas.itemconfig(self._vol_readout, text=f"{v:3d}%")
 
     def _on_duck_change(self):
-        d = int(self.duck_var.get())
-        self.cfg["duck_volume"] = d
-        self.canvas.itemconfig(self._duck_readout, text=f"{d:3d}%")
+        cut = int(self.duck_var.get())
+        # Store the floor (residual) on disk, not the cut, so background.py's
+        # existing _set_volume(DUCK_VOLUME) call still receives a valid
+        # "play at X%" number.
+        floor = max(0, min(100, 100 - cut))
+        self.cfg["duck_volume"] = floor
+        self.canvas.itemconfig(self._duck_readout, text=f"{cut:3d}%")
 
     # ── Briefing handlers ────────────────────────────────────────────────
     def _pick_briefing_project(self):

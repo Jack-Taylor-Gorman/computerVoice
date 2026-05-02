@@ -23,7 +23,20 @@ EXCLUDE_GROUPS = {"ds9_promenade"}
 
 _current: subprocess.Popen | None = None
 _ducked = False
-DUCK_VOLUME = 6  # % of normal while voice plays
+DUCK_VOLUME = 6  # % of normal while voice plays — overridden per-event from config
+
+
+def _read_duck_floor() -> int:
+    """Read ~/.majel_config.json's duck_volume (the residual %, NOT the
+    cut). Re-read on every duck event so the GUI slider live-updates the
+    behavior with no daemon restart needed."""
+    try:
+        import json as _j, os as _o
+        p = _o.path.expanduser("~/.majel_config.json")
+        cfg = _j.loads(open(p).read())
+        return max(0, min(100, int(cfg.get("duck_volume", 6))))
+    except Exception:
+        return 6
 
 
 def _sink_input_id(pid: int) -> str | None:
@@ -55,7 +68,8 @@ def _set_volume(pct: int) -> None:
 
 
 def _sig_duck(_signum, _frame):
-    global _ducked
+    global _ducked, DUCK_VOLUME
+    DUCK_VOLUME = _read_duck_floor()  # live-read so GUI slider takes effect
     _ducked = True
     _set_volume(DUCK_VOLUME)
 
