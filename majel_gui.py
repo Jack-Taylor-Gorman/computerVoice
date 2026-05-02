@@ -39,7 +39,7 @@ TREK_DB = ROOT / "storage" / "trekdata.sqlite"
 DAEMONS = {
     "background.py": "BACKGROUND AMBIENT",
     "voice_sfx.py":  "KEYBOARD SFX",
-    "majel_daemon.py": "RVC VOICE DAEMON",
+    "f5_daemon.py":  "F5-TTS VOICE DAEMON",
     "tty_watcher.py": "APPROVAL CHIME",
 }
 
@@ -1301,26 +1301,43 @@ class LCARSApp:
         return out
 
     def _pick_briefing_project(self):
-        """Open the Claude-project dropdown next to the PROJECT pill."""
+        """Open the Claude-project dropdown next to the PROJECT pill.
+
+        Always lists the currently-selected project at the top (with a
+        ✓ marker) so the user can confirm what they're about to brief
+        without having to dismiss + reopen. Clicking off the menu
+        auto-dismisses via tk.Menu's built-in grab semantics — DO NOT
+        call grab_release() ourselves immediately after tk_popup, that
+        prematurely tears down the global grab and leaves the menu
+        stuck open until the next click."""
         menu = tk.Menu(self.root, tearoff=0,
                        bg="#1a1a26", fg=LCARS["space_white"],
                        activebackground=LCARS["bluey"],
                        activeforeground=LCARS["bg"],
                        borderwidth=0)
         projects = self._claude_project_paths()
-        if not projects:
-            menu.add_command(label="(no remembered Claude projects)", state="disabled")
-        for p in projects[:20]:
-            label = f"{p.name}  —  {p}"
-            menu.add_command(label=label, command=lambda pp=p: self._set_briefing_project(pp))
+        current = self._briefing_project
+
+        # Pin the current project at the top so the user can see what's
+        # selected and re-confirm with one click. Other projects below.
+        menu.add_command(
+            label=f"✓  {current.name}  (current)",
+            command=lambda p=current: self._set_briefing_project(p),
+        )
+        # Filter dupes from the remembered list.
+        others = [p for p in projects if p.resolve() != current.resolve()]
+        if others:
+            menu.add_separator()
+            for p in others[:20]:
+                menu.add_command(
+                    label=f"{p.name}  —  {p}",
+                    command=lambda pp=p: self._set_briefing_project(pp),
+                )
         menu.add_separator()
         menu.add_command(label="📁  Browse for any folder…",
                          command=self._browse_briefing_project)
-        try:
-            x, y = self.root.winfo_pointerxy()
-            menu.tk_popup(x, y)
-        finally:
-            menu.grab_release()
+        x, y = self.root.winfo_pointerxy()
+        menu.tk_popup(x, y)
 
     def _browse_briefing_project(self):
         from tkinter import filedialog

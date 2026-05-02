@@ -541,14 +541,55 @@ def _expand_build_numbers(text: str) -> str:
     return _BUILD_RE.sub(_sub, text)
 
 
+# Heteronym disambiguation. F5-TTS reads "live" as the verb (l-IH-v) by
+# default, but the broadcasting / electric / present-tense uses ("live
+# stream", "the system is live", "live wire") want the long-i (l-EYE-v).
+# We rewrite the surface text with phonetic respellings so the model
+# pronounces them correctly. Order: more-specific patterns first, then
+# fall through to the general rule. Each entry: (regex, replacement) —
+# the regex must match a context that resolves the heteronym ambiguously.
+HETERONYM_RULES: list[tuple[str, str]] = [
+    # "live" (long-i): broadcasting / electric / present-tense / "is live".
+    (r"\blive\s+(stream(?:ing)?|broadcast|wire|view|demo|reload|edit(?:ing)?|update|deploy(?:ment)?|server|test|preview)\b",
+     r"lyve \1"),
+    (r"\b(is|are|was|were|stays|going|now|currently)\s+live\b", r"\1 lyve"),
+    (r"\blive\s+(?:in|on|at)\s+(production|prod|staging|main)\b", r"lyve in \1"),
+    # "read" (past tense — short-e, "red"): "I read the file" / "have read".
+    (r"\b(have|has|had|already|just|previously)\s+read\b", r"\1 red"),
+    # "lead" (metal, lower case singular noun): "lead solder", "lead pipe".
+    (r"\blead\s+(solder|pipe|paint|poisoning|acid|battery|shielding)\b",
+     r"led \1"),
+    # "wound" (past tense of wind, long-ow): "wound up", "wound around".
+    (r"\bwound\s+(up|around|tight)\b", r"wownd \1"),
+    # "bow" (front of ship — long-o): "bow of the ship".
+    (r"\bbow\s+(of\s+the\s+ship|section|thrusters?)\b", r"boh \1"),
+    # "tear" (rip — long-air, "tair"): "tear in the fabric / hull".
+    (r"\btear\s+in\s+the\s+(hull|fabric|page|file)\b", r"tair in the \1"),
+    # "minute" (small — adjective, my-NOOT): "minute detail / difference".
+    (r"\bminute\s+(detail|difference|amount|change|fluctuation)\b",
+     r"my-noot \1"),
+]
+_HETERONYM_RES: list[tuple[re.Pattern[str], str]] = [
+    (re.compile(p, flags=re.IGNORECASE), r) for p, r in HETERONYM_RULES
+]
+
+
+def _disambiguate_heteronyms(text: str) -> str:
+    for pat, rep in _HETERONYM_RES:
+        text = pat.sub(rep, text)
+    return text
+
+
 def _post_process(text: str) -> str:
     """Pronunciation expansions applied to every rewriter output before TTS.
     Order matters: build/version BEFORE acronyms so 'API v2.1.0' becomes
     'application programming interface version two point one point zero',
-    not 'API version two point one point zero'."""
+    not 'API version two point one point zero'. Heteronym disambiguation
+    runs LAST so we don't rewrite already-substituted tokens."""
     text = _expand_versions(text)
     text = _expand_build_numbers(text)
     text = _expand_acronyms(text)
+    text = _disambiguate_heteronyms(text)
     return text
 
 
