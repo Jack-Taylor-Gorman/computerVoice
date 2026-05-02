@@ -514,14 +514,23 @@ ACRONYMS: dict[str, str] = {
     "GitHub": "GitHub",  # placeholder — F5 already reads this fine; here for reference
 }
 # Pre-compile a single union regex sorted longest-first so "CI/CD" matches
-# before "CI" and "HTTPS" before "HTTP".
+# before "CI" and "HTTPS" before "HTTP". Case-INsensitive match — the
+# offline rewriter lowercases its output via SUBS, so a strictly cased
+# regex would miss "pid" produced after lowercase normalization.
 _ACRONYM_RE = re.compile(
-    r"\b(" + "|".join(re.escape(k) for k in sorted(ACRONYMS, key=len, reverse=True)) + r")\b"
+    r"\b(" + "|".join(re.escape(k) for k in sorted(ACRONYMS, key=len, reverse=True)) + r")\b",
+    flags=re.IGNORECASE,
 )
+# Lookup of lowercased keys → canonical expansion so we can resolve
+# any-case match against the canonical form.
+_ACRONYM_LOOKUP = {k.lower(): v for k, v in ACRONYMS.items()}
 
 
 def _expand_acronyms(text: str) -> str:
-    return _ACRONYM_RE.sub(lambda m: ACRONYMS[m.group(1)], text)
+    return _ACRONYM_RE.sub(
+        lambda m: _ACRONYM_LOOKUP.get(m.group(1).lower(), m.group(1)),
+        text,
+    )
 
 
 # Versions: "v1.2.3" / "version 1.2.3" → "version one point two point three"
@@ -616,7 +625,7 @@ def _post_process(text: str) -> str:
 # Cache key includes the prompt version so meaningful prompt changes
 # invalidate prior entries automatically.
 REWRITE_CACHE = Path(__file__).resolve().parent / "dataset" / "majel_rewrites.jsonl"
-PROMPT_VERSION = "2026-05-02-v2"  # bumped with invariant 19 + macOS/iOS expansions
+PROMPT_VERSION = "2026-05-02-v3"  # PID/SIG/IO + heteronyms + full-message join
 
 _cache: dict[str, str] | None = None
 
