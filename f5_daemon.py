@@ -82,14 +82,21 @@ def handle(conn: socket.socket, f5: F5TTS) -> None:
         if not text:
             conn.sendall(b'{"ok": false, "err": "empty text"}\n')
             return
+        # F5's duration estimator under-predicts the tail when gen_text
+        # is much longer than ref_text and SPEED < 1.0 (we run at 0.7),
+        # which clips the last word or two of long utterances. Force a
+        # terminal period and append a few trailing pause tokens so the
+        # estimator over-allocates frames; the extra tokens render as
+        # natural end-of-sentence silence so there's no audible artefact.
+        gen_text = text
+        if not gen_text.endswith((".", "!", "?")):
+            gen_text += "."
+        gen_text += "   . . ."
         with _lock:
-            # remove_silence=True over-trims one-word utterances ("Example.")
-            # so the actual word gets cut. Leave the natural tail silence in
-            # place — paplay handles it fine and short clips stay intact.
             f5.infer(
                 ref_file=str(REF_AUDIO),
                 ref_text=REF_TEXT,
-                gen_text=text,
+                gen_text=gen_text,
                 file_wave=dst,
                 show_info=lambda *a, **k: None,
                 remove_silence=False,
