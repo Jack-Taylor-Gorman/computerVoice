@@ -13,6 +13,14 @@ TRANSCRIPT="$(printf '%s' "$PAYLOAD" | "$DIR/venv/bin/python" -c 'import json,sy
 [ -z "$TRANSCRIPT" ] || [ ! -f "$TRANSCRIPT" ] && exit 0
 
 TEXT="$("$DIR/venv/bin/python" - "$TRANSCRIPT" <<'PY'
+# Extract ONLY the last text block from the last assistant message.
+#
+# Why: an assistant turn often contains multiple text blocks separated by
+# tool-use blocks (e.g., "I'll try X" → tool-call → "got error" → tool-call
+# → "done"). Joining all of them feeds intermediate-error language into the
+# rewriter, which may then voice the error instead of the final state.
+# The LAST text block is the post-resolution summary the model wrote AFTER
+# seeing the final tool result, so it reflects the actual ending condition.
 import json, sys
 path = sys.argv[1]
 last = ""
@@ -25,12 +33,14 @@ with open(path) as f:
         if o.get("type") != "assistant":
             continue
         msg = o.get("message", {})
-        parts = []
+        last_text_in_msg = ""
         for c in msg.get("content", []) or []:
             if isinstance(c, dict) and c.get("type") == "text":
-                parts.append(c.get("text", ""))
-        if parts:
-            last = "\n".join(parts)
+                t = (c.get("text") or "").strip()
+                if t:
+                    last_text_in_msg = t
+        if last_text_in_msg:
+            last = last_text_in_msg
 print(last)
 PY
 )"

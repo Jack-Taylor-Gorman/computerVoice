@@ -16,7 +16,8 @@ import sys
 import tempfile
 from pathlib import Path
 
-DAEMON_SOCK = "/tmp/majel.sock"
+DAEMON_SOCK = "/tmp/majel.sock"          # RVC daemon (legacy backend).
+F5_DAEMON_SOCK = "/tmp/majel_f5.sock"    # F5-TTS daemon (finetune backend).
 BG_PID_FILE = Path(__file__).resolve().parent / ".background.pid"
 
 # Hook children may inherit a minimal env missing XDG_RUNTIME_DIR, which paplay
@@ -45,7 +46,7 @@ def restore_background() -> None:
 
 
 def infer_via_daemon(src: str, dst: str, timeout: float = 60.0) -> bool:
-    """Send inference request to majel_daemon. Returns True on success."""
+    """Send inference request to majel_daemon (RVC). Returns True on success."""
     if not os.path.exists(DAEMON_SOCK):
         return False
     try:
@@ -53,6 +54,28 @@ def infer_via_daemon(src: str, dst: str, timeout: float = 60.0) -> bool:
         s.settimeout(timeout)
         s.connect(DAEMON_SOCK)
         s.sendall(json.dumps({"src": src, "dst": dst}).encode() + b"\n")
+        buf = b""
+        while not buf.endswith(b"\n"):
+            chunk = s.recv(4096)
+            if not chunk:
+                break
+            buf += chunk
+        s.close()
+        resp = json.loads(buf.decode() or '{"ok": false}')
+        return bool(resp.get("ok"))
+    except (OSError, json.JSONDecodeError):
+        return False
+
+
+def infer_via_f5_daemon(text: str, dst: str, timeout: float = 60.0) -> bool:
+    """Synthesize via the F5-TTS daemon directly from text. Returns True on success."""
+    if not os.path.exists(F5_DAEMON_SOCK):
+        return False
+    try:
+        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        s.settimeout(timeout)
+        s.connect(F5_DAEMON_SOCK)
+        s.sendall(json.dumps({"text": text, "dst": dst}).encode() + b"\n")
         buf = b""
         while not buf.endswith(b"\n"):
             chunk = s.recv(4096)
@@ -243,6 +266,42 @@ def main() -> int:
         finally:
             restore_background()
         return 0
+
+    # F5-TTS finetune backend — preferred when its daemon is up because the
+    # finetune carries Majel timbre directly and skips the edge-tts → RVC
+    # double-stack. Backend selection: env MAJEL_BACKEND, then config
+    # 'backend' field, default "f5". Falls through to RVC on any failure.
+    backend = os.environ.get("MAJEL_BACKEND", "").lower()
+    if not backend and cfg_path.exists():
+        try:
+            import json as _json
+            backend = (_json.loads(cfg_path.read_text()).get("backend") or "").lower()
+        except Exception:
+            pass
+    if not backend:
+        backend = "f5"
+    if backend == "f5":
+        with tempfile.TemporaryDirectory() as td:
+            f5_out = os.path.join(td, "out.wav")
+            if infer_via_f5_daemon(text, f5_out, timeout=120.0):
+                dbg = os.environ.get("MAJEL_LOG")
+                if dbg:
+                    shutil.copy(f5_out, "/tmp/majel_last.wav")
+                    with open(dbg, "a") as f:
+                        f.write(f"f5: wrote /tmp/majel_last.wav size={os.path.getsize(f5_out)}\n")
+                duck_background()
+                try:
+                    if not info_needed and ALERT_PRE_VOICE.exists():
+                        play(str(ALERT_PRE_VOICE))
+                    play(f5_out)
+                finally:
+                    restore_background()
+                return 0
+            # F5 daemon unreachable or threw — fall through to legacy stack.
+            dbg = os.environ.get("MAJEL_LOG")
+            if dbg:
+                with open(dbg, "a") as f:
+                    f.write("f5: daemon unavailable, falling back to RVC\n")
 
     with tempfile.TemporaryDirectory() as td:
         src = os.path.join(td, "src.mp3")

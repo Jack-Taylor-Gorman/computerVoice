@@ -10,10 +10,12 @@ Two modes, controlled by ~/.majel_config.json:voice_mode:
                         further the work, it appends a single computer-speak
                         question to the response.
 """
+import hashlib
 import json
 import os
 import re
 import sys
+from datetime import datetime
 from pathlib import Path
 
 CONFIG = Path.home() / ".majel_config.json"
@@ -64,19 +66,26 @@ TEMPLATES = [
 
     # ---- Insufficient input ----
     (r"\b(not\s+enough|insufficient)\s+(information|data|details|context)", "Insufficient data."),
-    (r"\bneed\s+more\s+(info|information|context|details)\b", "Insufficient data. Specify parameters."),
-    (r"\bambiguous\b", "Direction unclear. Please restate."),
+    (r"\bneed\s+more\s+(info|information|context|details)\b", "Insufficient data. @PARAM@"),
+    (r"\bambiguous\b", "Direction unclear. @PARAM@"),
 
     # ---- Request clarification ----
-    (r"\bwhat\s+(do|did)\s+you\s+mean\b", "Please restate."),
-    (r"\bcould you (clarify|explain|specify|rephrase)", "Please restate."),
-    (r"\bcan you (clarify|explain|specify|rephrase)", "Please restate."),
-    (r"\bwhich\s+one\s+do\s+you\s+(want|mean)\b", "Specify parameters."),
+    # @PARAM@ is a sentinel — apply_templates() resolves it to the most
+    # specific "Specify <field>." form by inspecting the input keywords
+    # (path / system / option / time / value / etc.). Falls back to
+    # "Please restate." when no field can be inferred.
+    (r"\bwhat\s+(do|did)\s+you\s+mean\b", "@PARAM@"),
+    (r"\bcould you (clarify|explain|specify|rephrase)", "@PARAM@"),
+    (r"\bcan you (clarify|explain|specify|rephrase)", "@PARAM@"),
+    (r"\bwhich\s+one\s+do\s+you\s+(want|mean)\b", "@PARAM@"),
 
     # ---- Warnings / errors ----
+    # Per Majel-voice-guide §4: alerts always lead with a label sentence
+    # ("Warning.") followed by a separate fact sentence. Two periods, two
+    # clauses — never merged.
     (r"\bfatal\s+(error|exception)\b|\bcrashed?\b", "Warning. Critical fault detected."),
-    (r"\berror\s+occurred\b|\bsomething went wrong\b", "Fault detected."),
-    (r"\b(failed|failure)\s+to\s+(\w+)", r"\2 unsuccessful."),
+    (r"\berror\s+occurred\b|\bsomething went wrong\b", "Warning. Fault detected."),
+    (r"\b(failed|failure)\s+to\s+(\w+)", r"Warning. \2 unsuccessful."),
     (r"\btimed?\s+out\b", "Connection timeout. Unable to comply."),
 
     # ---- Work in progress (capture target for context) ----
@@ -112,7 +121,7 @@ TEMPLATES = [
     (r"\b(successfully|all\s+set)\b", "Task complete."),
 
     # ---- System status ----
-    (r"\b(\w+)\s+(is\s+)?(broken|not\s+working|offline|down|unavailable)\b", r"\1 not functional."),
+    (r"\b(\w+)\s+(is\s+)?(broken|not\s+working|offline|down|unavailable)\b", r"Warning. \1 not functional."),
 
     # ---- Denial of address ----
     (r"\bdon'?t\s+(talk|speak)\s+to\s+me\s+like\s+that\b", "Do not address this unit in that manner."),
@@ -151,6 +160,9 @@ FILLERS = [
     r"\bfor you\b", r"\bto you\b", r"\bif you'?d like\b", r"\bif you want\b",
     r"\bas requested\b", r"\bit looks like\b", r"\bit seems\b", r"\bit appears\b",
     r"\bhere'?s\b", r"\bhere is\b", r"\bhere are\b",
+    # Per Majel-voice-guide §3 — the computer never hedges quantity. Strip
+    # vague approximators outright in the offline fallback path.
+    r"\bapproximately\b", r"\broughly\b", r"\bquickly\b", r"\bsoon\b",
 ]
 
 # Lexical substitutions (applied after templates fail, before filler strip).
@@ -168,7 +180,112 @@ SUBS = [
     (r"\bsuccessfully\b", ""),
     (r"\bdone\b\.?", "complete"),
     (r"\bfinished\b\.?", "complete"),
+    # Hedged-count → concrete: prefer "multiple" (declarative) over "several"
+    # / "a few" / "many" (vague). The computer states an exact number when
+    # known and "multiple" only when truly indeterminate.
+    (r"\ba\s+few\b", "multiple"),
+    (r"\bseveral\b", "multiple"),
+    (r"\bmany\b", "multiple"),
 ]
+
+
+# Captured-noun sanity check for the "work in progress" templates. If the
+# capture group accidentally swallowed a clause-joiner ("Let me check to
+# verify the auth" → "Scanning to verify the auth.") fall through to the
+# next template instead of emitting the malformed sentence.
+_BAD_OBJECT_RE = re.compile(
+    r"^(?:scanning(?:\s+for)?|accessing|initiating|compiling|updating|purging|integrating)"
+    r"\s+(?:to|if|whether|how|when|why|that|for\s+to)\b",
+    flags=re.IGNORECASE,
+)
+
+
+# Parameter-resolution table for the @PARAM@ sentinel. Order matters: more
+# specific keyword categories first. Per Majel-voice-guide §4 the canonical
+# clarification form names the missing field — "Specify path." not "Please
+# restate." — when the input gives any signal what's missing.
+PARAM_KEYWORDS = [
+    (re.compile(r"\b(?:file|path|directory|folder|filename)\b", re.IGNORECASE), "Specify path."),
+    (re.compile(r"\b(?:system|service|server|database|host|module)\b", re.IGNORECASE), "State target system."),
+    (re.compile(r"\b(?:user|username|account|login|credential)\b", re.IGNORECASE), "Specify user."),
+    (re.compile(r"\b(?:option|choice|alternative|version|variant|approach)\b", re.IGNORECASE), "Specify selection."),
+    (re.compile(r"\b(?:time|when|deadline|schedule|duration)\b", re.IGNORECASE), "Time parameters?"),
+    (re.compile(r"\b(?:value|number|quantity|amount|count|threshold)\b", re.IGNORECASE), "Specify value."),
+    (re.compile(r"\b(?:command|action|operation|step|instruction)\b", re.IGNORECASE), "Specify command."),
+    (re.compile(r"\b(?:name|identifier|id|label|key)\b", re.IGNORECASE), "Specify name."),
+]
+
+
+def _resolve_param_specifier(original_text: str) -> str:
+    """Pick the most specific 'Specify <field>.' string for the prose."""
+    for pat, out in PARAM_KEYWORDS:
+        if pat.search(original_text):
+            return out
+    return "Please restate."
+
+
+_NUM_WORDS = ["one", "two", "three", "four"]
+
+
+def _detect_steps(text: str) -> str | None:
+    """If text describes 2-4 sequential steps, format as Majel enumeration:
+    "Three-step sequence initiated. Step one, X. Step two, Y. Step three, Z.
+    Standing by."
+
+    Conservative — only fires on:
+      • "plan: A, B, C" / "steps: A, B, C"  (colon-introduced list)
+      • "first X, then Y[, then Z]"          (explicit ordering markers)
+      • numbered "1. X 2. Y"
+    Never fires on a bare comma list, so prose like "I fixed it, pushed,
+    tested" stays as one sentence.
+    """
+    low = text.lower()
+    steps: list[str] = []
+
+    m = re.search(r"\b(?:plan|steps?|approach|process|sequence)\s*:\s*(.+?)(?:\.\s|$)", low)
+    if m:
+        body = m.group(1)
+        steps = [x.strip(" ,.;") for x in re.split(r"\s*,\s*|\s+then\s+", body) if x.strip()]
+    elif re.search(r"\bfirst\b.*\bthen\b", low, flags=re.DOTALL):
+        m2 = re.match(
+            r".*?\bfirst\s*[,:]?\s*(.+?)\s*[,;.]\s+(?:and\s+)?then\s+(.+?)"
+            r"(?:\s*[,;.]\s+(?:and\s+)?then\s+(.+?))?(?:\.|$)",
+            low, flags=re.DOTALL,
+        )
+        if m2:
+            steps = [g.strip(" ,.;") for g in m2.groups() if g and g.strip()]
+    elif re.search(r"(?:^|\n)\s*1\.\s+", text):
+        m3 = re.findall(r"(?:^|\n)\s*\d\.\s+(.+?)(?=\n\s*\d\.|$)", text, flags=re.DOTALL)
+        steps = [s.strip().rstrip(".") for s in m3]
+
+    steps = steps[:4]
+    cleaned: list[str] = []
+    for s in steps:
+        s = re.sub(r"\s+", " ", s).strip()
+        # Keep only the first short clause of each step.
+        s = re.split(r"[,;.]", s, 1)[0].strip()
+        # Drop leading first-person noise — invariant 2: the computer never
+        # says "I". "I'll fix the bug" → "fix the bug".
+        s = re.sub(
+            r"^(?:i'?ll|i\s+will|i'?m\s+going\s+to|i'?m\s+gonna|i'?ve|i\s+have|i\s+can|i\s+would|i'?d|i)\s+",
+            "", s, flags=re.IGNORECASE,
+        ).strip()
+        if s:
+            cleaned.append(s)
+
+    if not (2 <= len(cleaned) <= 4):
+        return None
+
+    n = len(cleaned)
+    parts = [f"{_NUM_WORDS[n-1].capitalize()}-step sequence initiated."]
+    for i, s in enumerate(cleaned):
+        # Capitalize the step content's first letter so "step one, fix bug"
+        # reads "Step one, Fix bug." — actually leave lowercase per Trek
+        # canon: "Step one, fix the bug." Both are acceptable; lowercase
+        # is closer to TNG "11001001" cadence.
+        parts.append(f"Step {_NUM_WORDS[i]}, {s}.")
+    parts.append("Standing by.")
+    return " ".join(parts)
 
 
 def apply_templates(text: str) -> str | None:
@@ -199,9 +316,21 @@ def apply_templates(text: str) -> str | None:
         if not (short_input and (covers_most or anchors_first)):
             continue
         try:
-            return re.sub(pat, rep, m.group(0), flags=re.IGNORECASE).strip().capitalize()
+            result = re.sub(pat, rep, m.group(0), flags=re.IGNORECASE).strip()
         except re.error:
-            return rep
+            result = rep
+        # Resolve @PARAM@ sentinel from clarification templates: pick the
+        # most specific "Specify <field>." form based on the input keywords.
+        if "@PARAM@" in result:
+            result = result.replace("@PARAM@", _resolve_param_specifier(text)).strip()
+        # Reject malformed "Scanning to verify..." outputs where the capture
+        # swallowed a clause-joiner instead of a noun phrase.
+        if _BAD_OBJECT_RE.search(result):
+            continue
+        # Capitalize first letter only — the second clause already starts
+        # capitalized in our two-clause templates, and Python's str.capitalize
+        # would lowercase it.
+        return result[0].upper() + result[1:] if result else result
     return None
 
 
@@ -258,6 +387,7 @@ Invariants:
 15. When asking for input, end with a short imperative: "Specify selection.", "Awaiting confirmation.", "State target system.", "Provide credentials."
 16. Preserve every numeric value, file name, identifier, and proper noun from the input — re-style around them, never substitute or omit.
 17. Use canonical Trek-computer phrasing where it fits: "Stand by.", "Working.", "Affirmative.", "Negative.", "Unable to comply.", "Access granted.", "Access denied.", "Insufficient data.", "Specify parameters.", "Initiating <noun> sequence.", "Scanning <noun>.", "<noun> not on file.", "Authorization required."
+18. Report only the FINAL state. If the input describes a problem that was subsequently resolved, an error that was later fixed, an approach that was abandoned for another, or an attempt that was corrected — report the resolution, not the discarded intermediate failure. The voice represents the ENDING condition, never the journey. Phrases like "first I tried X but it failed, then Y worked" become exactly "Y complete." The user does not need to hear about errors that no longer exist.
 
 Output only the rewritten response — no explanation, no quotes, no preface, no Markdown, no bullet points. Use ONLY plain sentences ending with "." or "!" or "?". Always finish every sentence — never leave a thought partial. Match the user's full content scope; expand to as many sentences as required."""
 
@@ -280,23 +410,209 @@ _FEW_SHOTS = [
 ]
 
 
+# ── Pronunciation post-processing ────────────────────────────────────
+# F5-TTS reads acronyms phonetically by default ("API" → "appy", "GUI" →
+# "gooey"). Expand them to their full meaning so the computer says
+# "application programming interface" the way Majel would. Versions and
+# build numbers get whitespace/comma-injected so each token is enunciated
+# distinctly rather than mashed into a single fast utterance.
+ACRONYMS: dict[str, str] = {
+    "API": "application programming interface",
+    "GUI": "graphical user interface",
+    "CLI": "command-line interface",
+    "JSON": "JavaScript object notation",
+    "JWT": "JavaScript object notation web token",
+    "HTTP": "hypertext transfer protocol",
+    "HTTPS": "hypertext transfer protocol secure",
+    "URL": "uniform resource locator",
+    "URI": "uniform resource identifier",
+    "HTML": "hypertext markup language",
+    "CSS": "cascading style sheets",
+    "XML": "extensible markup language",
+    "SQL": "structured query language",
+    "AWS": "Amazon Web Services",
+    "GCP": "Google Cloud Platform",
+    "IDE": "integrated development environment",
+    "LLM": "large language model",
+    "NPM": "node package manager",
+    "PDF": "portable document format",
+    "USB": "universal serial bus",
+    "SSH": "secure shell",
+    "DNS": "domain name system",
+    "VPN": "virtual private network",
+    "CSV": "comma-separated values",
+    "SDK": "software development kit",
+    "TLS": "transport layer security",
+    "SSL": "secure sockets layer",
+    "FTP": "file transfer protocol",
+    "TCP": "transmission control protocol",
+    "UDP": "user datagram protocol",
+    "ORM": "object-relational mapper",
+    "VM": "virtual machine",
+    "DB": "database",
+    "K8S": "Kubernetes",
+    "RAM": "random-access memory",
+    "CPU": "central processing unit",
+    "GPU": "graphics processing unit",
+    "SSD": "solid-state drive",
+    "HDD": "hard disk drive",
+    "OS": "operating system",
+    "TTS": "text-to-speech",
+    "ASR": "automatic speech recognition",
+    "PR": "pull request",
+    "CI/CD": "continuous integration and continuous deployment",
+    "CI": "continuous integration",
+    "CD": "continuous deployment",
+    "OAuth": "Oh Auth",
+    "REPL": "read-evaluate-print loop",
+    "CRUD": "create, read, update, delete",
+    "JS": "JavaScript",
+    "TS": "TypeScript",
+    "RPC": "remote procedure call",
+    "gRPC": "G remote procedure call",
+}
+# Pre-compile a single union regex sorted longest-first so "CI/CD" matches
+# before "CI" and "HTTPS" before "HTTP".
+_ACRONYM_RE = re.compile(
+    r"\b(" + "|".join(re.escape(k) for k in sorted(ACRONYMS, key=len, reverse=True)) + r")\b"
+)
+
+
+def _expand_acronyms(text: str) -> str:
+    return _ACRONYM_RE.sub(lambda m: ACRONYMS[m.group(1)], text)
+
+
+# Versions: "v1.2.3" / "version 1.2.3" → "version one point two point three"
+# Restricted to explicit v/version prefix so plain decimals aren't molested.
+_VERSION_RE = re.compile(
+    r"\b(v|version)\s*\.?\s*(\d+(?:\.\d+){1,3})\b",
+    flags=re.IGNORECASE,
+)
+
+
+def _expand_versions(text: str) -> str:
+    def _sub(m: re.Match) -> str:
+        nums = m.group(2).split(".")
+        return "version " + " point ".join(nums)
+    return _VERSION_RE.sub(_sub, text)
+
+
+# Long build / commit / PR / release numbers: insert commas between every
+# digit so F5 enunciates them distinctly instead of slurring "1234567".
+_BUILD_RE = re.compile(
+    r"\b(build|release|commit|pr|pull\s+request|issue|ticket)\s*#?\s*(\d{3,})\b",
+    flags=re.IGNORECASE,
+)
+
+
+def _expand_build_numbers(text: str) -> str:
+    def _sub(m: re.Match) -> str:
+        prefix = m.group(1)
+        digits = m.group(2)
+        spaced = ", ".join(digits)
+        return f"{prefix} {spaced}"
+    return _BUILD_RE.sub(_sub, text)
+
+
+def _post_process(text: str) -> str:
+    """Pronunciation expansions applied to every rewriter output before TTS.
+    Order matters: build/version BEFORE acronyms so 'API v2.1.0' becomes
+    'application programming interface version two point one point zero',
+    not 'API version two point one point zero'."""
+    text = _expand_versions(text)
+    text = _expand_build_numbers(text)
+    text = _expand_acronyms(text)
+    return text
+
+
+# ── API rewrite cache ─────────────────────────────────────────────────
+# Every successful API rewrite is appended to this JSONL so:
+#   1. Identical inputs in future sessions skip the API call (fast + free).
+#   2. The corpus accumulates as ground-truth (input → Majel) pairs that
+#      a small local model could one day be distilled on.
+# Cache key includes the prompt version so meaningful prompt changes
+# invalidate prior entries automatically.
+REWRITE_CACHE = Path(__file__).resolve().parent / "dataset" / "majel_rewrites.jsonl"
+PROMPT_VERSION = "2026-05-02-v1"
+
+_cache: dict[str, str] | None = None
+
+
+def _cache_key(text: str, mode: str) -> str:
+    h = hashlib.sha1()
+    h.update(PROMPT_VERSION.encode())
+    h.update(b"|"); h.update(mode.encode())
+    h.update(b"|"); h.update(text.strip().encode())
+    return h.hexdigest()
+
+
+def _load_cache() -> dict[str, str]:
+    global _cache
+    if _cache is not None:
+        return _cache
+    _cache = {}
+    if REWRITE_CACHE.exists():
+        try:
+            for line in REWRITE_CACHE.read_text().splitlines():
+                if not line.strip():
+                    continue
+                try:
+                    row = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                k = row.get("key")
+                v = row.get("output")
+                if k and v:
+                    _cache[k] = v
+        except OSError:
+            pass
+    return _cache
+
+
+def _save_cache_entry(key: str, src: str, output: str, mode: str, model: str) -> None:
+    REWRITE_CACHE.parent.mkdir(parents=True, exist_ok=True)
+    row = {
+        "key": key,
+        "prompt_version": PROMPT_VERSION,
+        "mode": mode,
+        "input": src,
+        "output": output,
+        "model": model,
+        "timestamp": datetime.utcnow().isoformat(),
+    }
+    try:
+        with REWRITE_CACHE.open("a") as f:
+            f.write(json.dumps(row, ensure_ascii=False) + "\n")
+    except OSError:
+        return
+    cache = _load_cache()
+    cache[key] = output
+
+
 def _llm_rewrite(text: str) -> str | None:
+    mode = _voice_mode()
+    key = _cache_key(text, mode)
+    cache = _load_cache()
+    cached = cache.get(key)
+    if cached:
+        return cached
     try:
         from anthropic import Anthropic
-        key = _api_key()
-        if not key:
+        key_str = _api_key()
+        if not key_str:
             return None
-        client = Anthropic(api_key=key)
+        client = Anthropic(api_key=key_str)
         prompt = SYSTEM_PROMPT
-        if _voice_mode() == "api":
+        if mode == "api":
             prompt = SYSTEM_PROMPT + SYSTEM_PROMPT_API_SUFFIX
         messages = []
         for src, tgt in _FEW_SHOTS:
             messages.append({"role": "user", "content": src})
             messages.append({"role": "assistant", "content": tgt})
         messages.append({"role": "user", "content": text})
+        model_id = "claude-haiku-4-5-20251001"
         r = client.messages.create(
-            model="claude-haiku-4-5-20251001",
+            model=model_id,
             system=[{"type": "text", "text": prompt, "cache_control": {"type": "ephemeral"}}],
             max_tokens=600,
             temperature=0.1,
@@ -310,6 +626,8 @@ def _llm_rewrite(text: str) -> str | None:
         m = re.search(r"^(.*[.!?])(?!.*[.!?])", out, flags=re.DOTALL)
         if m:
             out = m.group(1).strip()
+        # Persist for future cache hits + corpus accumulation.
+        _save_cache_entry(key, text, out, mode, model_id)
         return out
     except Exception:
         return None
@@ -324,18 +642,25 @@ def computerize(text: str) -> str:
     if _voice_mode() == "api" and _api_key():
         llm = _llm_rewrite(t)
         if llm:
-            return _with_project_header(llm)
+            return _with_project_header(_post_process(llm))
         # Fall through to offline path if API call fails.
+    # Multi-step plan detection runs BEFORE templates so an explicit
+    # "first X, then Y, then Z" doesn't get partially eaten by an earlier
+    # work-in-progress regex. Conservative — only fires on explicit list
+    # markers; bare prose passes through untouched.
+    enumerated = _detect_steps(t)
+    if enumerated:
+        return _with_project_header(_post_process(enumerated))
     templated = apply_templates(t)
     if templated:
         templated = re.sub(r"(?<=[.!?])\s+([a-z])", lambda m: " " + m.group(1).upper(), templated)
         if not templated.endswith((".", "!", "?")):
             templated += "."
-        return _with_project_header(templated)
+        return _with_project_header(_post_process(templated))
     llm = _llm_rewrite(t)
     if llm:
-        return _with_project_header(llm)
-    return _with_project_header(fallback_strip(t))
+        return _with_project_header(_post_process(llm))
+    return _with_project_header(_post_process(fallback_strip(t)))
 
 
 def _project_name() -> str:

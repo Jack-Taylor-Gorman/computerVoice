@@ -47,7 +47,7 @@ def validate(dataset: Path) -> tuple[bool, list[str]]:
 def launch(dataset: Path, epochs: int, batch: int, grad_ckpt: bool, resume: str | None) -> int:
     MAJEL_CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
     cmd = [
-        "f5-tts_finetune",
+        "f5-tts_finetune-cli",
         "--dataset_path", str(dataset),
         "--metadata_file", str(dataset / "metadata.csv"),
         "--output_dir", str(MAJEL_CHECKPOINT_DIR),

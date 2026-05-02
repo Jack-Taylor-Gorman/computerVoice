@@ -52,3 +52,16 @@ Thumbs.db
 *.swp
 *.swo
 *~
+
+# API rewrite cache — accumulating corpus of (input → Majel) pairs.
+# Excluded by default because dev prose can be private; flip if you
+# decide to publish the dataset.
+dataset/majel_rewrites.jsonl
+dataset/majel_rewrites.jsonl.tmp
+.majel_daemon.pid
+.majel_f5_daemon.pid
+.voice_sfx.pid
+
+# Tensorboard / training run logs.
+runs/
+ckpts/
