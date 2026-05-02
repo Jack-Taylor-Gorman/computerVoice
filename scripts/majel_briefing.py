@@ -2,20 +2,20 @@
 """Project briefing mode — give the computer a full read of any project
 and have her deliver a Majel-voice mission briefing.
 
-Three depth levels:
-  --mode full       (default) Status, objective, faults, options. ~250-500w.
-  --mode recent     Recent developments only — last commits, diff, last-24h
-                    files. ~150-250w.
-  --mode momentum   Trajectory + velocity — what's accelerating, what's
-                    stalled, predicted next milestone. ~150-250w.
+Two depth levels:
+  --mode full   (default) Status, objective, faults, options. ~250-500w.
+  --mode quick  Recent developments only — last commits, current diff,
+                README/explainer skim. ~150-250w.
 
 By default the briefing covers this project. Pass --project /path/to/dir
-to brief any other directory.
+to brief any other directory. Markdown / explainer files (README.md,
+CONTEXT.md, GOALS.md, ROADMAP.md, CLAUDE.md, AGENTS.md) get prioritized
+context for both modes.
 
 Usage:
   scripts/majel_briefing.py                              # full, this project
-  scripts/majel_briefing.py --mode recent                # recent developments
-  scripts/majel_briefing.py --mode momentum --print      # don't synthesize
+  scripts/majel_briefing.py --mode quick                 # recent developments
+  scripts/majel_briefing.py --print                      # don't synthesize
   scripts/majel_briefing.py --project /path/to/repo      # different project
 """
 from __future__ import annotations
@@ -69,40 +69,46 @@ def gather_context(project: Path, mode: str) -> str:
         pass
 
     if mode == "full":
+        # Pull every recognized context/explainer file in full.
         for fname in CONTEXT_FILES:
             p = project / fname
             if p.exists() and p.is_file():
                 txt = p.read_text(errors="ignore")[:6000]
                 parts.append(f"\n=== {fname} ===\n{txt}")
+        # Also walk top-level .md files we don't recognize, capped, so
+        # arbitrary projects with their own docs file get covered.
+        seen = {f.lower() for f in CONTEXT_FILES}
+        for md in sorted(project.glob("*.md")):
+            if md.name.lower() in seen:
+                continue
+            try:
+                parts.append(f"\n=== {md.name} (extra) ===\n{md.read_text(errors='ignore')[:3000]}")
+            except OSError:
+                pass
     else:
-        # Recent / momentum modes only need the README (or first found doc)
-        # for orientation — full ROADMAP/CONTEXT etc. would dilute focus.
-        for fname in CONTEXT_FILES[:3]:  # README variants
+        # Quick mode: pull the first README-flavored file for orientation
+        # plus any top-level *.md so we don't miss the project's own
+        # explainer with a non-standard name (e.g. "VOICE_GUIDE.md").
+        for fname in CONTEXT_FILES[:3]:
             p = project / fname
             if p.exists() and p.is_file():
-                txt = p.read_text(errors="ignore")[:2000]
+                txt = p.read_text(errors="ignore")[:2500]
                 parts.append(f"\n=== {fname} (excerpt) ===\n{txt}")
                 break
+        for md in sorted(project.glob("*.md"))[:3]:
+            try:
+                parts.append(f"\n=== {md.name} (excerpt) ===\n{md.read_text(errors='ignore')[:1500]}")
+            except OSError:
+                pass
 
     if mode == "full":
         log = _run(["git", "log", "--oneline", "-40"], cwd=project)
         if log:
             parts.append(f"\n=== RECENT COMMITS (last 40) ===\n{log}")
-    elif mode == "recent":
+    else:  # quick
         log = _run(["git", "log", "--oneline", "-15"], cwd=project)
         if log:
             parts.append(f"\n=== RECENT COMMITS (last 15) ===\n{log}")
-    elif mode == "momentum":
-        # Velocity signals: commits per day for last 30 days, files-changed
-        # rate, current branch state.
-        log = _run(["git", "log", "--pretty=format:%ad %s", "--date=short", "-50"],
-                   cwd=project)
-        if log:
-            parts.append(f"\n=== COMMIT TIMELINE (last 50, dated) ===\n{log}")
-        shortstat = _run(["git", "log", "--shortstat", "--pretty=format:%h %ad %s",
-                          "--date=short", "-15"], cwd=project)
-        if shortstat:
-            parts.append(f"\n=== COMMIT CHURN (last 15) ===\n{shortstat[:3000]}")
 
     diff_stat = _run(["git", "diff", "--stat", "HEAD"], cwd=project)
     if diff_stat:
@@ -165,32 +171,23 @@ Total length: 250–500 words. Concise but complete.
 {_VOICE_RULES}"""
 
 
-PROMPT_RECENT = f"""You are the Star Trek ship's computer (Majel Barrett voice). The captain has requested a focused report on RECENT DEVELOPMENTS only — last commits, current uncommitted work, files modified this work session. Skip the full mission objective; assume the captain knows the project.
+PROMPT_QUICK = f"""You are the Star Trek ship's computer (Majel Barrett voice). The captain has requested a QUICK BRIEFING — recent developments only, no full mission objective recap. Assume the captain knows the project.
 
 Single section, starting with the labelled sentence:
 
-"Recent developments report."
+"Quick briefing."
 
-Cover: what shipped in the most recent commits (3-5 sentences), what is in flight as uncommitted work (2-3 sentences), and one short closing sentence about whether the trajectory is toward completion or new scope. Total length: 150–250 words.
-
-{_VOICE_RULES}"""
-
-
-PROMPT_MOMENTUM = f"""You are the Star Trek ship's computer (Majel Barrett voice). The captain has requested a TRAJECTORY / MOMENTUM read: how fast the project is moving, what is accelerating, what is stalling, and what the projected next milestone is. This is forward-looking, not retrospective.
-
-Single section, starting with the labelled sentence:
-
-"Trajectory analysis."
-
-Cover: commit cadence over the recent timeline ("Cadence: N commits in M days. Pattern: [...]."), which subsystems are accelerating, which are decelerating or untouched, what the next likely milestone is based on current direction, and ONE creative speculative next step that would compound the existing momentum. End with a Majel-style imperative inviting the captain to confirm direction. Total length: 150–250 words.
+Cover: what shipped in the most recent commits (3-5 sentences), what is in flight as uncommitted work (2-3 sentences), and one short closing sentence about whether the trajectory is toward completion or new scope expansion. Total length: 150–250 words.
 
 {_VOICE_RULES}"""
 
 
 PROMPTS = {
     "full": PROMPT_FULL,
-    "recent": PROMPT_RECENT,
-    "momentum": PROMPT_MOMENTUM,
+    "quick": PROMPT_QUICK,
+    # Back-compat aliases for the prior --mode values.
+    "recent": PROMPT_QUICK,
+    "momentum": PROMPT_QUICK,
 }
 
 
@@ -237,8 +234,9 @@ def speak(chunk: str) -> None:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--mode", choices=["full", "recent", "momentum"],
-                    default="full", help="Briefing depth and focus.")
+    ap.add_argument("--mode", choices=["full", "quick", "recent", "momentum"],
+                    default="full",
+                    help="Briefing depth: full or quick. (recent/momentum kept as aliases for the old API.)")
     ap.add_argument("--project", type=Path, default=ROOT,
                     help="Project directory to brief (default: this project).")
     ap.add_argument("--print", dest="print_only", action="store_true",

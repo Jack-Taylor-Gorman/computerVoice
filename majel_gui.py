@@ -898,59 +898,61 @@ class LCARSApp:
                       fill=LCARS["sunflower"], font=self.f_section)
         y += 26
 
-        # Project selector — clicking opens a directory chooser.
+        # State init.
         if not hasattr(self, "_briefing_project"):
             self._briefing_project = ROOT
         if not hasattr(self, "_briefing_mode"):
             self._briefing_mode = "full"
+        # In-memory caches keyed by (project_path, mode). Avoid re-reading
+        # files / re-calling the LLM when the captain triggers the same
+        # briefing twice in a session.
+        if not hasattr(self, "_briefing_ctx_cache"):
+            self._briefing_ctx_cache: dict[tuple[str, str], str] = {}
+        if not hasattr(self, "_briefing_out_cache"):
+            self._briefing_out_cache: dict[tuple[str, str], str] = {}
+
+        # Project selector row: PROJECT label · main project pill (dropdown
+        # of remembered Claude projects) · small folder pill (browse any).
         c.create_text(x0, y + 8, anchor="nw", text="PROJECT",
                       fill=LCARS["african_violet"], font=self.f_label)
-        proj_label = self._briefing_project.name or str(self._briefing_project)
+        proj_label = (self._briefing_project.name or str(self._briefing_project)) + "  ▾"
+        folder_w = 44
+        proj_x = x0 + 110
+        proj_w = col_w - 110 - folder_w - 8
         self._pills["briefing_project"] = PillButton(
-            c, x0 + 110, y, col_w - 110, 32, proj_label,
+            c, proj_x, y, proj_w, 32, proj_label,
             self._pick_briefing_project,
-            color=LCARS["bluey"], round_side="both", font=self.f_label,
+            color=LCARS["bluey"], round_side="left", font=self.f_label,
             tag_suffix="briefing_project",
+        )
+        self._pills["briefing_browse"] = PillButton(
+            c, proj_x + proj_w + 8, y, folder_w, 32, "📁",
+            self._browse_briefing_project,
+            color=LCARS["lilac"], round_side="right", font=self.f_label,
+            tag_suffix="briefing_browse",
         )
         y += 42
 
-        # Three mode pills: FULL / RECENT / MOMENTUM. Active mode is bright.
+        # Two mode pills: FULL BRIEF / QUICK BRIEF. Active is bright.
         mode_specs = [
-            ("full",     "FULL BRIEF",        LCARS["butterscotch"], "left"),
-            ("recent",   "RECENT",            LCARS["lilac"],        "none"),
-            ("momentum", "MOMENTUM",          LCARS["african_violet"], "right"),
+            ("full",  "FULL BRIEF",  LCARS["butterscotch"],   "left"),
+            ("quick", "QUICK BRIEF", LCARS["african_violet"], "right"),
         ]
-        mode_w = col_w // 3
-        widths = [mode_w, mode_w, col_w - 2 * mode_w]
+        mode_w = col_w // 2
+        widths = [mode_w, col_w - mode_w]
         x = x0
         for (mode, label, color, side), w in zip(mode_specs, widths):
             active = (self._briefing_mode == mode)
-            if side == "none":
-                rect_id = c.create_rectangle(
-                    x, y, x + w, y + 36,
-                    fill=color if active else "#1d1d2a",
-                    outline=color if active else "#1d1d2a",
-                    tags=("chrome", f"pill_brief_{mode}"))
-                txt_id = c.create_text(
-                    x + w / 2, y + 18, text=label,
-                    fill=LCARS["bg"] if active else color,
-                    font=self.f_label,
-                    tags=("chrome", f"pill_brief_{mode}"))
-                c.tag_bind(f"pill_brief_{mode}", "<ButtonRelease-1>",
-                           lambda e, m=mode: self._set_briefing_mode(m))
-                self._pills[f"brief_mode_{mode}"] = _BarSegmentAdapter(
-                    c, rect_id, txt_id, color=color)
-            else:
-                self._pills[f"brief_mode_{mode}"] = PillButton(
-                    c, x, y, w, 36, label,
-                    lambda m=mode: self._set_briefing_mode(m),
-                    color=color if active else "#1d1d2a",
-                    hover=color if active else _brighten(color, 0.55),
-                    press=color,
-                    fg=LCARS["bg"] if active else color,
-                    round_side=side, font=self.f_label,
-                    tag_suffix=f"brief_mode_{mode}",
-                )
+            self._pills[f"brief_mode_{mode}"] = PillButton(
+                c, x, y, w, 36, label,
+                lambda m=mode: self._set_briefing_mode(m),
+                color=color if active else "#1d1d2a",
+                hover=color if active else _brighten(color, 0.55),
+                press=color,
+                fg=LCARS["bg"] if active else color,
+                round_side=side, font=self.f_label,
+                tag_suffix=f"brief_mode_{mode}",
+            )
             x += w
         y += 50
 
@@ -1271,27 +1273,78 @@ class LCARSApp:
         self.canvas.itemconfig(self._duck_readout, text=f"{cut:3d}%")
 
     # ── Briefing handlers ────────────────────────────────────────────────
+    def _claude_project_paths(self) -> list[Path]:
+        """Decode every ~/.claude/projects/<slug>/ into the real filesystem
+        path. Slug format: leading '-' followed by path components joined
+        with '-'. Only return entries whose decoded path actually exists
+        as a directory (so deleted projects don't clutter the menu)."""
+        out: list[Path] = []
+        base = Path.home() / ".claude" / "projects"
+        if not base.is_dir():
+            return out
+        for d in base.iterdir():
+            if not d.is_dir():
+                continue
+            slug = d.name.lstrip("-")
+            if not slug:
+                continue
+            real = Path("/" + slug.replace("-", "/"))
+            if real.is_dir():
+                out.append(real)
+        # Sort by mtime of the slug dir (most recent first) so the active
+        # projects float to the top of the dropdown.
+        out.sort(key=lambda p: -((Path.home() / ".claude" / "projects" /
+                                  ("-" + str(p).lstrip("/").replace("/", "-"))).stat().st_mtime
+                                 if (Path.home() / ".claude" / "projects" /
+                                     ("-" + str(p).lstrip("/").replace("/", "-"))).exists()
+                                 else 0))
+        return out
+
     def _pick_briefing_project(self):
+        """Open the Claude-project dropdown next to the PROJECT pill."""
+        menu = tk.Menu(self.root, tearoff=0,
+                       bg="#1a1a26", fg=LCARS["space_white"],
+                       activebackground=LCARS["bluey"],
+                       activeforeground=LCARS["bg"],
+                       borderwidth=0)
+        projects = self._claude_project_paths()
+        if not projects:
+            menu.add_command(label="(no remembered Claude projects)", state="disabled")
+        for p in projects[:20]:
+            label = f"{p.name}  —  {p}"
+            menu.add_command(label=label, command=lambda pp=p: self._set_briefing_project(pp))
+        menu.add_separator()
+        menu.add_command(label="📁  Browse for any folder…",
+                         command=self._browse_briefing_project)
+        try:
+            x, y = self.root.winfo_pointerxy()
+            menu.tk_popup(x, y)
+        finally:
+            menu.grab_release()
+
+    def _browse_briefing_project(self):
         from tkinter import filedialog
         path = filedialog.askdirectory(
-            title="Select project to brief",
-            initialdir=str(self._briefing_project.parent),
+            title="Select any folder to brief",
+            initialdir=str(self._briefing_project.parent
+                           if self._briefing_project.parent.is_dir() else Path.home()),
         )
         if path:
-            self._briefing_project = Path(path)
-            pill = self._pills.get("briefing_project")
-            if pill:
-                pill.set_text(self._briefing_project.name or str(self._briefing_project))
+            self._set_briefing_project(Path(path))
+
+    def _set_briefing_project(self, p: Path):
+        self._briefing_project = p
+        pill = self._pills.get("briefing_project")
+        if pill:
+            pill.set_text((p.name or str(p)) + "  ▾")
 
     def _set_briefing_mode(self, mode: str):
         if self._briefing_mode == mode:
             return
         self._briefing_mode = mode
-        # Recolor all three mode pills to reflect the new active state.
-        for spec_mode, _, color, _ in (
-            ("full",     "FULL BRIEF", LCARS["butterscotch"], "left"),
-            ("recent",   "RECENT",     LCARS["lilac"],        "none"),
-            ("momentum", "MOMENTUM",   LCARS["african_violet"], "right"),
+        for spec_mode, color in (
+            ("full",  LCARS["butterscotch"]),
+            ("quick", LCARS["african_violet"]),
         ):
             pill = self._pills.get(f"brief_mode_{spec_mode}")
             if not pill:
@@ -1302,23 +1355,82 @@ class LCARSApp:
                 fg=LCARS["bg"] if active else color,
             )
 
-    def _trigger_briefing(self):
-        py = ROOT / "venv" / "bin" / "python"
-        script = ROOT / "scripts" / "majel_briefing.py"
-        if not script.exists() or not py.exists():
-            return
-        log = open("/tmp/majel_briefing.log", "a")
-        subprocess.Popen(
-            [str(py), str(script),
-             "--mode", self._briefing_mode,
-             "--project", str(self._briefing_project)],
-            stdout=log, stderr=subprocess.STDOUT,
-        )
-        # Visual ack — flash the trigger pill briefly.
+    def _briefing_status(self, text: str) -> None:
+        """Update the trigger pill's label from any thread."""
         pill = self._pills.get("briefing_trigger")
-        if pill:
-            pill.set_text("▶ BRIEFING DISPATCHED")
-            self.root.after(2400, lambda: pill.set_text("▶  TRIGGER BRIEFING"))
+        if not pill:
+            return
+        # tk widgets must be touched from the main loop only.
+        self.root.after(0, lambda: pill.set_text(text))
+
+    def _trigger_briefing(self):
+        # Prevent overlapping triggers.
+        existing = getattr(self, "_briefing_thread", None)
+        if existing is not None and existing.is_alive():
+            self._briefing_status("◐ ALREADY RUNNING")
+            self.root.after(1500, lambda: self._briefing_status("▶  TRIGGER BRIEFING"))
+            return
+
+        project = self._briefing_project
+        mode = self._briefing_mode
+        key = self.cfg.get("anthropic_api_key") or os.environ.get("ANTHROPIC_API_KEY")
+        if not key:
+            self._briefing_status("✗ NO API KEY")
+            self.root.after(2400, lambda: self._briefing_status("▶  TRIGGER BRIEFING"))
+            return
+
+        def _worker():
+            import sys as _sys, threading as _th  # noqa: F401
+            scripts_dir = ROOT / "scripts"
+            if str(scripts_dir) not in _sys.path:
+                _sys.path.insert(0, str(scripts_dir))
+            if str(ROOT) not in _sys.path:
+                _sys.path.insert(0, str(ROOT))
+            try:
+                import majel_briefing as mb  # type: ignore
+                import computerize  # type: ignore
+
+                cache_key = (str(project), mode)
+
+                # Step 1 — gather context (cached after first read).
+                ctx = self._briefing_ctx_cache.get(cache_key)
+                if ctx is None:
+                    self._briefing_status("◐ READING FILES…")
+                    ctx = mb.gather_context(project, mode)
+                    self._briefing_ctx_cache[cache_key] = ctx
+
+                # Step 2 — call Claude (cached output).
+                briefing = self._briefing_out_cache.get(cache_key)
+                if briefing is None:
+                    self._briefing_status("◐ THINKING…")
+                    briefing = mb.call_claude(ctx, key, mode)
+                    if briefing:
+                        self._briefing_out_cache[cache_key] = briefing
+                if not briefing:
+                    self._briefing_status("✗ EMPTY BRIEFING")
+                    self.root.after(2400, lambda: self._briefing_status("▶  TRIGGER BRIEFING"))
+                    return
+
+                # Step 3 — pronunciation post-processing + speak.
+                briefing_proc = computerize._post_process(briefing)
+                self._briefing_status("◐ SPEAKING…")
+                for chunk in mb.chunk_for_speak(briefing_proc):
+                    mb.speak(chunk)
+
+                self._briefing_status("✓ BRIEFING COMPLETE")
+                self.root.after(3000, lambda: self._briefing_status("▶  TRIGGER BRIEFING"))
+            except Exception as ex:
+                with open("/tmp/majel_briefing.log", "a") as f:
+                    import traceback
+                    f.write(f"\n--- briefing error {time.time()} ---\n")
+                    traceback.print_exc(file=f)
+                self._briefing_status(f"✗ ERROR (see /tmp/majel_briefing.log)")
+                self.root.after(3000, lambda: self._briefing_status("▶  TRIGGER BRIEFING"))
+
+        import threading
+        self._briefing_thread = threading.Thread(target=_worker, daemon=True)
+        self._briefing_thread.start()
+        self._briefing_status("◐ STARTING…")
 
     # ── Service status ────────────────────────────────────────────────────
     def _restart(self, script: str):
