@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Majel · Computer Voice for Claude Code</title>
+<meta name="description" content="The Star Trek computer narrates your code. Majel-Barrett voice finetune for Claude Code, in canonical LCARS cadence. Open source, local, yours.">
+<meta property="og:title" content="Majel · Computer Voice for Claude Code">
+<meta property="og:description" content="A real Majel-Barrett voice finetune speaks every Claude Code response in canonical LCARS cadence.">
+<style>
+:root {
+  --bg:           #000000;
+  --bg-2:         #0c0c1a;
+  --bluey:        #8899ff;
+  --orange:       #ff8800;
+  --butterscotch: #ff9966;
+  --sunflower:    #ffcc99;
+  --violet:       #ccaaff;
+  --lima:         #cccc66;
+  --lima-bean:    #99cc66;
+  --space-white:  #f5f6fa;
+  --red:          #cc4444;
+}
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; padding: 0; background: var(--bg); color: var(--space-white);
+  font-family: "Antonio", "DejaVu Sans Condensed", "Liberation Sans Narrow",
+               "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-weight: 700; letter-spacing: 0.02em;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--sunflower); text-decoration: none; }
+a:hover { color: var(--orange); }
+
+/* ---- LCARS top bar ------------------------------------------------- */
+.lcars-bar {
+  display: grid;
+  grid-template-columns: 168px 1fr 280px;
+  grid-template-rows: 96px;
+  margin-bottom: 14px;
+}
+.lcars-bar .corner {
+  background: var(--bluey);
+  border-top-left-radius: 80px;
+}
+.lcars-bar .title {
+  background: var(--bluey); color: var(--bg);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 28px; letter-spacing: 0.08em;
+  height: 32px; align-self: end;
+}
+.lcars-bar .right {
+  background: var(--orange); color: var(--bg);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; height: 32px; align-self: end;
+}
+
+/* ---- Section frame ------------------------------------------------- */
+.section {
+  display: grid;
+  grid-template-columns: 168px 1fr;
+  gap: 4px;
+  margin-bottom: 18px;
+}
+.rail {
+  background: var(--violet);
+  color: var(--bg);
+  padding: 10px 14px;
+  font-size: 18px; letter-spacing: 0.06em;
+  border-radius: 0 18px 18px 0;
+  display: flex; align-items: flex-start; justify-content: flex-end;
+  text-align: right;
+}
+.rail.orange     { background: var(--orange); }
+.rail.bluey      { background: var(--bluey); }
+.rail.butter     { background: var(--butterscotch); }
+.rail.sun        { background: var(--sunflower); }
+.rail.violet     { background: var(--violet); }
+.rail.lima       { background: var(--lima); }
+.body {
+  background: var(--bg-2);
+  border-left: 2px solid var(--violet);
+  padding: 18px 22px;
+  font-weight: 400; font-size: 16px; line-height: 1.55;
+}
+.body.bluey { border-left-color: var(--bluey); }
+.body.orange { border-left-color: var(--orange); }
+.body.butter { border-left-color: var(--butterscotch); }
+.body.sun { border-left-color: var(--sunflower); }
+
+h1, h2 {
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+h1 { font-size: 38px; margin: 0 0 10px; color: var(--space-white); }
+h1 .glow { color: var(--orange); }
+h2 { font-size: 22px; margin: 0 0 10px; color: var(--sunflower); text-transform: uppercase; }
+.sub { color: var(--bluey); font-size: 16px; font-weight: 400; }
+
+/* ---- Hero ---------------------------------------------------------- */
+.hero {
+  padding: 8px 0 12px;
+}
+.hero h1 { font-size: 44px; }
+.hero .subline { color: var(--bluey); font-size: 19px; max-width: 760px; font-weight: 400; }
+
+/* ---- YouTube embed ------------------------------------------------- */
+.video-wrap {
+  position: relative; padding-top: 56.25%; margin: 12px 0 0;
+  border: 2px solid var(--bluey); border-radius: 18px; overflow: hidden;
+  background: #000;
+}
+.video-wrap iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+
+/* ---- Audio player blocks ------------------------------------------- */
+.audio-block {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  background: var(--bg);
+  padding: 14px 16px;
+  border: 1px solid var(--violet);
+  border-radius: 12px;
+  margin-top: 10px;
+}
+.audio-block .label { color: var(--sunflower); font-size: 14px; letter-spacing: 0.08em; }
+.audio-block .desc { color: var(--space-white); font-size: 15px; font-weight: 400; }
+.audio-block canvas { width: 100%; height: 64px; background: var(--bg-2); border-radius: 6px; }
+.audio-block .row { display: flex; align-items: center; gap: 12px; }
+.audio-block button {
+  border: 0; background: var(--orange); color: var(--bg);
+  font-family: inherit; font-weight: 700; font-size: 14px;
+  padding: 10px 20px; border-radius: 999px; cursor: pointer;
+  letter-spacing: 0.05em;
+}
+.audio-block button:hover { background: var(--butterscotch); }
+.audio-block button.playing { background: var(--lima-bean); }
+.audio-block .timer {
+  color: var(--bluey); font-variant-numeric: tabular-nums;
+  font-size: 13px; min-width: 70px;
+}
+
+/* ---- Use-case grid ------------------------------------------------- */
+.usecase-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; margin-top: 8px; }
+.usecase-grid .card {
+  background: var(--bg); border: 1px solid var(--bluey); border-radius: 14px;
+  padding: 16px 18px;
+}
+.usecase-grid .card h3 { margin: 0 0 6px; color: var(--orange); font-size: 17px; letter-spacing: 0.04em; }
+.usecase-grid .card p { margin: 0; color: var(--space-white); font-weight: 400; font-size: 15px; line-height: 1.5; }
+@media (max-width: 760px) {
+  .usecase-grid { grid-template-columns: 1fr; }
+}
+
+/* ---- Code block ---------------------------------------------------- */
+.code {
+  background: #07070d; color: var(--lima);
+  font-family: "DejaVu Sans Mono", "Menlo", "Consolas", monospace;
+  font-size: 13.5px; font-weight: 400;
+  padding: 14px 16px; border-radius: 8px;
+  border-left: 3px solid var(--lima-bean);
+  white-space: pre; overflow-x: auto;
+  margin: 10px 0;
+}
+.code .comment { color: #5e6478; }
+.steps { padding-left: 22px; margin: 6px 0 12px; }
+.steps li { margin-bottom: 4px; font-weight: 400; color: var(--space-white); }
+.notice {
+  border-left: 3px solid var(--butterscotch); padding-left: 14px;
+  color: var(--butterscotch); font-weight: 400; font-size: 14px;
+  margin-top: 10px;
+}
+
+/* ---- Bottom bar ---------------------------------------------------- */
+.lcars-foot {
+  display: grid;
+  grid-template-columns: 168px 1fr 280px;
+  grid-template-rows: 96px;
+  margin-top: 24px;
+}
+.lcars-foot .corner {
+  background: var(--orange);
+  border-bottom-left-radius: 80px;
+}
+.lcars-foot .right {
+  background: var(--bluey); color: var(--bg);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; height: 32px;
+}
+.lcars-foot .center {
+  background: var(--orange); color: var(--bg);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; height: 32px;
+}
+
+main { padding: 0 18px 24px; max-width: 1180px; margin: 0 auto; }
+@media (max-width: 760px) {
+  .lcars-bar, .lcars-foot { grid-template-columns: 60px 1fr 120px; }
+  .lcars-bar .corner, .lcars-foot .corner { border-radius: 30px 0 0 0; }
+  .lcars-foot .corner { border-radius: 0 0 0 30px; }
+  .section { grid-template-columns: 60px 1fr; }
+  .rail { font-size: 13px; padding: 8px; border-radius: 0 12px 12px 0; }
+  .body { padding: 14px 16px; font-size: 15px; }
+  .hero h1 { font-size: 30px; }
+  .hero .subline { font-size: 16px; }
+}
+</style>
+</head>
+<body>
+
+<!-- ============== TOP LCARS BAR ============== -->
+<header class="lcars-bar">
+  <div class="corner"></div>
+  <div class="title">MAJEL · COMPUTER VOICE FOR CLAUDE CODE</div>
+  <div class="right">LCARS 03-A</div>
+</header>
+
+<main>
+
+  <!-- ============== HERO ============== -->
+  <section class="section">
+    <div class="rail orange">HERO</div>
+    <div class="body orange hero">
+      <h1>The <span class="glow">Star Trek computer</span> narrates your code now.</h1>
+      <p class="subline">A real Majel-Barrett voice finetune speaks every Claude Code response in canonical LCARS cadence — open source, local, yours.</p>
+      <p class="subline" style="margin-top:14px">
+        <a href="https://github.com/Jack-Taylor-Gorman/computerVoice" style="color:var(--lima-bean)">▶ View on GitHub</a>
+        &nbsp;·&nbsp;
+        <a href="#install">Install in five minutes</a>
+      </p>
+    </div>
+  </section>
+
+  <!-- ============== WHY: YOUTUBE ============== -->
+  <section class="section">
+    <div class="rail violet">WHY</div>
+    <div class="body">
+      <h2>You already know this voice.</h2>
+      <p>For thirty years the LCARS computer has been the default mental image of how a working assistant should sound: terse, declarative, exact, calm. <em>(Begin clip at 1:50.)</em></p>
+      <div class="video-wrap">
+        <iframe
+          src="https://www.youtube.com/embed/Drr6_zikuZQ?start=110"
+          title="Star Trek LCARS computer interactions"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          referrerpolicy="strict-origin-when-cross-origin"
+          allowfullscreen></iframe>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============== HEAR IT ============== -->
+  <section class="section">
+    <div class="rail bluey">HEAR IT</div>
+    <div class="body bluey">
+      <h2>Real output from the project.</h2>
+      <p>Each clip below is generated by the F5-TTS finetune on the canonical Majel voice corpus, prefaced with the project's own LCARS attention chime. No stock TTS.</p>
+
+      <div class="audio-block">
+        <div class="label">▶ INTRO</div>
+        <div class="desc">A 25-second introduction in the project's own voice.</div>
+        <canvas id="wave-intro"></canvas>
+        <div class="row">
+          <button id="btn-intro" type="button">PLAY ▶</button>
+          <span class="timer" id="t-intro">0:00 / 0:00</span>
+        </div>
+        <audio id="audio-intro" preload="metadata" src="audio/intro.wav"></audio>
+      </div>
+
+      <div class="audio-block">
+        <div class="label">▶ API KEY SETUP TUTORIAL</div>
+        <div class="desc">A four-step configuration sequence read by Majel.</div>
+        <canvas id="wave-api"></canvas>
+        <div class="row">
+          <button id="btn-api" type="button">PLAY ▶</button>
+          <span class="timer" id="t-api">0:00 / 0:00</span>
+        </div>
+        <audio id="audio-api" preload="metadata" src="audio/api-setup.wav"></audio>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============== USE CASES ============== -->
+  <section class="section">
+    <div class="rail butter">USE CASES</div>
+    <div class="body butter">
+      <h2>What it actually does for your workflow.</h2>
+      <div class="usecase-grid">
+        <div class="card">
+          <h3>Parallel-session audible status</h3>
+          <p>Run four Claude sessions across four projects. The computer tells you which one finished, in which repo, without you switching windows. Utterances queue sequentially through a shared lock so two sessions never speak over each other.</p>
+        </div>
+        <div class="card">
+          <h3>Ambient awareness</h3>
+          <p>Look away from the terminal. The work narrates itself. Background music crossfades between tracks, ducks during voice, and restores on the next turn — you keep flow without staring at a scrollback.</p>
+        </div>
+        <div class="card">
+          <h3>Mic-aware halt</h3>
+          <p>Start dictating into chat speech-to-text and the voice cuts itself off automatically. Detected via active source-output sample-rate, not a heuristic — peak meters and visualizers don't trigger it.</p>
+        </div>
+        <div class="card">
+          <h3>Project briefings on demand</h3>
+          <p>Click "Trigger briefing" in the LCARS panel and Majel reads a status / mission / open-faults / recommended-actions report on any of your Claude projects. Persisted as markdown for diff-comparison later.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============== INSTALL ============== -->
+  <section class="section" id="install">
+    <div class="rail sun">INSTALL</div>
+    <div class="body sun">
+      <h2>Five-minute setup.</h2>
+      <ol class="steps">
+        <li>Clone the repository.</li>
+        <li>Create a Python venv and install requirements.</li>
+        <li>Drop your Anthropic key into <code>~/.majel_config.json</code>.</li>
+        <li>Wire <code>hook.sh</code> as a Claude Code Stop hook and <code>session_start.sh</code> as the SessionStart hook.</li>
+        <li>Launch the LCARS control panel.</li>
+      </ol>
+<pre class="code"><span class="comment"># clone + venv</span>
+git clone https://github.com/Jack-Taylor-Gorman/computerVoice.git
+cd computerVoice
+python3 -m venv venv
+./venv/bin/pip install -r trekdata/requirements.txt
+
+<span class="comment"># add your Anthropic key (or skip for offline mode)</span>
+cat &gt; ~/.majel_config.json &lt;&lt;'EOF'
+{"voice_enabled": true, "voice_mode": "api",
+ "anthropic_api_key": "sk-ant-...", "backend": "f5"}
+EOF
+
+<span class="comment"># wire hooks in ~/.claude/settings.json:</span>
+<span class="comment">#   Stop          → hook.sh</span>
+<span class="comment">#   SessionStart  → session_start.sh</span>
+
+<span class="comment"># launch the panel</span>
+./venv/bin/python majel_gui.py</pre>
+      <div class="notice">
+        Tested on Linux with PulseAudio / PipeWire. macOS and Windows are unverified. CUDA-capable GPU recommended for the F5 daemon (CPU fallback works but is slower).
+      </div>
+    </div>
+  </section>
+
+  <!-- ============== WHY OPEN ============== -->
+  <section class="section">
+    <div class="rail lima">SOURCE</div>
+    <div class="body">
+      <h2>Open source, local, yours.</h2>
+      <p>No telemetry. No SaaS. No phone-home. The voice runs on your machine; the rewriter calls the Anthropic API only when you flip <code>voice_mode: api</code>. The full model checkpoint, the curation tooling, the briefing pipeline, and the LCARS GUI are in the repo.</p>
+      <p style="margin-top:10px">
+        <a href="https://github.com/Jack-Taylor-Gorman/computerVoice" style="color:var(--orange);font-size:18px">▶  github.com/Jack-Taylor-Gorman/computerVoice</a>
+      </p>
+    </div>
+  </section>
+
+</main>
+
+<!-- ============== BOTTOM LCARS BAR ============== -->
+<footer class="lcars-foot">
+  <div class="corner"></div>
+  <div class="center">END OF TRANSMISSION  ·  STANDING BY</div>
+  <div class="right">MAJEL CONTROL</div>
+</footer>
+
+<script>
+// ----- Audio + waveform -----
+// Pure DOM/Canvas — no libs. Each <audio> element gets a canvas that
+// draws decoded peak data once, plus a moving playhead during playback.
+(function () {
+  const blocks = [
+    { audio: "audio-intro", btn: "btn-intro", canvas: "wave-intro", timer: "t-intro" },
+    { audio: "audio-api",   btn: "btn-api",   canvas: "wave-api",   timer: "t-api"   },
+  ];
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+
+  function fmt(t) {
+    if (!isFinite(t)) return "0:00";
+    const m = Math.floor(t / 60), s = Math.floor(t % 60);
+    return m + ":" + String(s).padStart(2, "0");
+  }
+
+  async function decodeFor(url) {
+    const r = await fetch(url);
+    const ab = await r.arrayBuffer();
+    return await ctx.decodeAudioData(ab);
+  }
+
+  function drawWave(canvas, peaks) {
+    const dpr = window.devicePixelRatio || 1;
+    const cssW = canvas.clientWidth, cssH = canvas.clientHeight;
+    canvas.width = cssW * dpr; canvas.height = cssH * dpr;
+    const c = canvas.getContext("2d");
+    c.scale(dpr, dpr);
+    c.clearRect(0, 0, cssW, cssH);
+    c.fillStyle = "#ffcc99";
+    const n = peaks.length;
+    const w = cssW / n;
+    const mid = cssH / 2;
+    for (let i = 0; i < n; i++) {
+      const h = peaks[i] * (cssH * 0.92);
+      c.fillRect(i * w, mid - h / 2, Math.max(1, w - 0.6), h);
+    }
+    return { c, cssW, cssH };
+  }
+
+  function drawPlayhead(canvas, peaks, ratio) {
+    const ctxd = drawWave(canvas, peaks).c;
+    const x = canvas.clientWidth * ratio;
+    ctxd.fillStyle = "rgba(255, 136, 0, 0.30)";
+    ctxd.fillRect(0, 0, x, canvas.clientHeight);
+    ctxd.fillStyle = "#ff8800";
+    ctxd.fillRect(x - 1, 0, 2, canvas.clientHeight);
+  }
+
+  blocks.forEach(async (b) => {
+    const audio = document.getElementById(b.audio);
+    const btn   = document.getElementById(b.btn);
+    const canvas = document.getElementById(b.canvas);
+    const timer = document.getElementById(b.timer);
+    let peaks = null;
+
+    try {
+      const buf = await decodeFor(audio.src);
+      const channel = buf.getChannelData(0);
+      const N = 240;
+      const block = Math.max(1, Math.floor(channel.length / N));
+      peaks = new Array(N);
+      for (let i = 0; i < N; i++) {
+        let max = 0;
+        for (let j = i * block; j < (i + 1) * block && j < channel.length; j++) {
+          const v = Math.abs(channel[j]);
+          if (v > max) max = v;
+        }
+        peaks[i] = max;
+      }
+      drawWave(canvas, peaks);
+      timer.textContent = fmt(0) + " / " + fmt(buf.duration);
+    } catch (e) {
+      // Fallback: no waveform; just show the standard <audio> controls.
+      console.warn("decode failed, falling back", e);
+      audio.controls = true;
+      canvas.style.display = "none";
+      btn.style.display = "none";
+      timer.style.display = "none";
+    }
+
+    btn.addEventListener("click", () => {
+      // Pause every other audio so two clips don't overlap.
+      blocks.forEach((other) => {
+        if (other.audio !== b.audio) {
+          const a = document.getElementById(other.audio);
+          if (!a.paused) {
+            a.pause();
+            const ob = document.getElementById(other.btn);
+            ob.textContent = "PLAY ▶";
+            ob.classList.remove("playing");
+          }
+        }
+      });
+      if (audio.paused) {
+        ctx.resume && ctx.resume();
+        audio.play();
+        btn.textContent = "PAUSE ❚❚";
+        btn.classList.add("playing");
+      } else {
+        audio.pause();
+        btn.textContent = "PLAY ▶";
+        btn.classList.remove("playing");
+      }
+    });
+
+    audio.addEventListener("timeupdate", () => {
+      if (peaks) {
+        const ratio = audio.duration ? audio.currentTime / audio.duration : 0;
+        drawPlayhead(canvas, peaks, ratio);
+      }
+      timer.textContent = fmt(audio.currentTime) + " / " + fmt(audio.duration || 0);
+    });
+
+    audio.addEventListener("ended", () => {
+      btn.textContent = "PLAY ▶";
+      btn.classList.remove("playing");
+      if (peaks) drawPlayhead(canvas, peaks, 0);
+    });
+  });
+
+  // Re-draw waveforms on resize.
+  window.addEventListener("resize", () => {
+    blocks.forEach(async (b) => {
+      const audio = document.getElementById(b.audio);
+      const canvas = document.getElementById(b.canvas);
+      try {
+        const buf = await decodeFor(audio.src);
+        const channel = buf.getChannelData(0);
+        const N = 240;
+        const block = Math.max(1, Math.floor(channel.length / N));
+        const peaks = new Array(N);
+        for (let i = 0; i < N; i++) {
+          let max = 0;
+          for (let j = i * block; j < (i + 1) * block && j < channel.length; j++) {
+            const v = Math.abs(channel[j]);
+            if (v > max) max = v;
+          }
+          peaks[i] = max;
+        }
+        drawWave(canvas, peaks);
+      } catch (_e) { /* ignore */ }
+    });
+  }, { passive: true });
+})();
+</script>
+
+</body>
+</html>
