@@ -1,16 +1,22 @@
 #!/usr/bin/env python3
-"""Project briefing mode — give the computer a full read of the project
-state, then have her deliver a Majel-voice mission briefing covering:
+"""Project briefing mode — give the computer a full read of any project
+and have her deliver a Majel-voice mission briefing.
 
-  1. PROJECT STATUS REPORT       — what's operational, what's recent
-  2. MISSION OBJECTIVE           — what we're trying to achieve
-  3. OPEN FAULTS                 — TODOs, FIXMEs, uncommitted changes
-  4. RECOMMENDED COURSES OF ACTION — 3-5 creative next steps
+Three depth levels:
+  --mode full       (default) Status, objective, faults, options. ~250-500w.
+  --mode recent     Recent developments only — last commits, diff, last-24h
+                    files. ~150-250w.
+  --mode momentum   Trajectory + velocity — what's accelerating, what's
+                    stalled, predicted next milestone. ~150-250w.
+
+By default the briefing covers this project. Pass --project /path/to/dir
+to brief any other directory.
 
 Usage:
-  scripts/majel_briefing.py              # speak it (default)
-  scripts/majel_briefing.py --print      # print, don't synthesize
-  scripts/majel_briefing.py --text-only  # dump raw context, no Claude
+  scripts/majel_briefing.py                              # full, this project
+  scripts/majel_briefing.py --mode recent                # recent developments
+  scripts/majel_briefing.py --mode momentum --print      # don't synthesize
+  scripts/majel_briefing.py --project /path/to/repo      # different project
 """
 from __future__ import annotations
 
@@ -45,12 +51,16 @@ def _run(args: list[str], cwd: Path | None = None) -> str:
         return ""
 
 
-def gather_context() -> str:
-    parts: list[str] = [f"=== PROJECT ROOT: {ROOT.name} ==="]
+def gather_context(project: Path, mode: str) -> str:
+    """Build the context string for Claude. Different modes pull different
+    slices: full pulls everything, recent skips deep history, momentum
+    focuses on commit velocity and recent activity."""
+    parts: list[str] = [f"=== PROJECT ROOT: {project.name} ==="]
+    parts.append(f"=== BRIEFING MODE: {mode} ===")
 
     parts.append("\n=== TOP-LEVEL ENTRIES ===")
     try:
-        for entry in sorted(ROOT.iterdir()):
+        for entry in sorted(project.iterdir()):
             if entry.name.startswith("."):
                 continue
             tag = "/" if entry.is_dir() else ""
@@ -58,48 +68,83 @@ def gather_context() -> str:
     except OSError:
         pass
 
-    for fname in CONTEXT_FILES:
-        p = ROOT / fname
-        if p.exists() and p.is_file():
-            txt = p.read_text(errors="ignore")[:6000]
-            parts.append(f"\n=== {fname} ===\n{txt}")
+    if mode == "full":
+        for fname in CONTEXT_FILES:
+            p = project / fname
+            if p.exists() and p.is_file():
+                txt = p.read_text(errors="ignore")[:6000]
+                parts.append(f"\n=== {fname} ===\n{txt}")
+    else:
+        # Recent / momentum modes only need the README (or first found doc)
+        # for orientation — full ROADMAP/CONTEXT etc. would dilute focus.
+        for fname in CONTEXT_FILES[:3]:  # README variants
+            p = project / fname
+            if p.exists() and p.is_file():
+                txt = p.read_text(errors="ignore")[:2000]
+                parts.append(f"\n=== {fname} (excerpt) ===\n{txt}")
+                break
 
-    log = _run(["git", "log", "--oneline", "-40"], cwd=ROOT)
-    if log:
-        parts.append(f"\n=== RECENT COMMITS (last 40) ===\n{log}")
+    if mode == "full":
+        log = _run(["git", "log", "--oneline", "-40"], cwd=project)
+        if log:
+            parts.append(f"\n=== RECENT COMMITS (last 40) ===\n{log}")
+    elif mode == "recent":
+        log = _run(["git", "log", "--oneline", "-15"], cwd=project)
+        if log:
+            parts.append(f"\n=== RECENT COMMITS (last 15) ===\n{log}")
+    elif mode == "momentum":
+        # Velocity signals: commits per day for last 30 days, files-changed
+        # rate, current branch state.
+        log = _run(["git", "log", "--pretty=format:%ad %s", "--date=short", "-50"],
+                   cwd=project)
+        if log:
+            parts.append(f"\n=== COMMIT TIMELINE (last 50, dated) ===\n{log}")
+        shortstat = _run(["git", "log", "--shortstat", "--pretty=format:%h %ad %s",
+                          "--date=short", "-15"], cwd=project)
+        if shortstat:
+            parts.append(f"\n=== COMMIT CHURN (last 15) ===\n{shortstat[:3000]}")
 
-    diff_stat = _run(["git", "diff", "--stat", "HEAD"], cwd=ROOT)
+    diff_stat = _run(["git", "diff", "--stat", "HEAD"], cwd=project)
     if diff_stat:
         parts.append(f"\n=== UNCOMMITTED DIFF (stat) ===\n{diff_stat}")
-
-    status = _run(["git", "status", "--short", "--branch"], cwd=ROOT)
+    status = _run(["git", "status", "--short", "--branch"], cwd=project)
     if status:
         parts.append(f"\n=== GIT STATUS ===\n{status}")
 
-    todos: list[str] = []
-    for pat in SCAN_PATTERNS:
-        out = _run(
-            ["grep", "-rn", "--include=*.py", "--include=*.sh", "--include=*.md",
-             "--include=*.ts", "--include=*.js", pat, "."],
-            cwd=ROOT,
-        )
-        if out.strip():
-            todos.append(out)
-    if todos:
-        joined = "\n".join(todos)
-        # Cap at 6000 chars so a noisy codebase doesn't blow context.
-        parts.append(f"\n=== OPEN TODOS / FIXMES (capped) ===\n{joined[:6000]}")
+    if mode == "full":
+        todos: list[str] = []
+        for pat in SCAN_PATTERNS:
+            out = _run(
+                ["grep", "-rn", "--include=*.py", "--include=*.sh", "--include=*.md",
+                 "--include=*.ts", "--include=*.js", pat, "."],
+                cwd=project,
+            )
+            if out.strip():
+                todos.append(out)
+        if todos:
+            joined = "\n".join(todos)
+            parts.append(f"\n=== OPEN TODOS / FIXMES (capped) ===\n{joined[:6000]}")
 
-    # Quick line-count summary so the model has a size signal.
-    py_files = list(ROOT.rglob("*.py"))
-    py_lines = sum(p.read_text(errors="ignore").count("\n")
-                   for p in py_files if "venv" not in p.parts and "site-packages" not in p.parts)
-    parts.append(f"\n=== SIZE ===\n{len(py_files)} python files, ~{py_lines} lines")
+    if mode == "full":
+        py_files = list(project.rglob("*.py"))
+        py_lines = sum(p.read_text(errors="ignore").count("\n")
+                       for p in py_files
+                       if "venv" not in p.parts and "site-packages" not in p.parts)
+        parts.append(f"\n=== SIZE ===\n{len(py_files)} python files, ~{py_lines} lines")
 
     return "\n".join(parts)
 
 
-BRIEFING_PROMPT = """You are the Star Trek ship's computer (Majel Barrett voice). The user is the captain of a development project. Your task: deliver a comprehensive briefing of the project's state in computer-speak. The full project context is provided below by the user.
+_VOICE_RULES = """Voice rules (apply throughout):
+- No contractions. No "I". No "we". No pleasantries.
+- Declarative, period-separated sentences. One thought per sentence.
+- Exact numerals over qualitative words.
+- Label-first alerts where applicable ("Warning. ...").
+- When asking the user to specify something AND a recommendation exists, the imperative ("Specify selection.") comes BEFORE the recommendation ("Recommend option two, [reason]."), as separate sentences.
+Output ONLY the briefing — no preamble, no markdown, no headers, no quotes, no bullet symbols. Use plain sentences ending with "." or "!" or "?"."""
+
+
+PROMPT_FULL = f"""You are the Star Trek ship's computer (Majel Barrett voice). The user is the captain of a development project. Your task: deliver a comprehensive briefing of the project's state in computer-speak. The full project context is provided below by the user.
 
 The briefing must contain four sections, in order, each starting with a labelled sentence:
 
@@ -115,25 +160,49 @@ Outstanding issues — TODO/FIXME items, uncommitted changes, known bugs, partia
 SECTION 4 — "Recommended courses of action."
 Three to five concrete next steps the captain could pursue. Be creative — suggest experiments, refactors, features, or research that would advance the mission. Use the option-enumeration form: "Option one, [action]. Option two, [action]." etc. End with a single imperative ("Specify selection.") so the captain can choose.
 
-Voice rules (apply throughout):
-- No contractions. No "I". No "we". No pleasantries.
-- Declarative, period-separated sentences. One thought per sentence.
-- Exact numerals over qualitative words.
-- Label-first alerts where applicable ("Warning. ...").
-- When asking the user to specify something AND a recommendation exists, the imperative ("Specify selection.") comes BEFORE the recommendation ("Recommend option two, [reason]."), as separate sentences.
-- Total length: 250–500 words. Concise but complete.
+Total length: 250–500 words. Concise but complete.
 
-Output ONLY the briefing — no preamble, no markdown, no headers, no quotes, no bullet symbols. Use plain sentences ending with "." or "!" or "?"."""
+{_VOICE_RULES}"""
 
 
-def call_claude(context: str, key: str) -> str:
+PROMPT_RECENT = f"""You are the Star Trek ship's computer (Majel Barrett voice). The captain has requested a focused report on RECENT DEVELOPMENTS only — last commits, current uncommitted work, files modified this work session. Skip the full mission objective; assume the captain knows the project.
+
+Single section, starting with the labelled sentence:
+
+"Recent developments report."
+
+Cover: what shipped in the most recent commits (3-5 sentences), what is in flight as uncommitted work (2-3 sentences), and one short closing sentence about whether the trajectory is toward completion or new scope. Total length: 150–250 words.
+
+{_VOICE_RULES}"""
+
+
+PROMPT_MOMENTUM = f"""You are the Star Trek ship's computer (Majel Barrett voice). The captain has requested a TRAJECTORY / MOMENTUM read: how fast the project is moving, what is accelerating, what is stalling, and what the projected next milestone is. This is forward-looking, not retrospective.
+
+Single section, starting with the labelled sentence:
+
+"Trajectory analysis."
+
+Cover: commit cadence over the recent timeline ("Cadence: N commits in M days. Pattern: [...]."), which subsystems are accelerating, which are decelerating or untouched, what the next likely milestone is based on current direction, and ONE creative speculative next step that would compound the existing momentum. End with a Majel-style imperative inviting the captain to confirm direction. Total length: 150–250 words.
+
+{_VOICE_RULES}"""
+
+
+PROMPTS = {
+    "full": PROMPT_FULL,
+    "recent": PROMPT_RECENT,
+    "momentum": PROMPT_MOMENTUM,
+}
+
+
+def call_claude(context: str, key: str, mode: str) -> str:
     from anthropic import Anthropic
     client = Anthropic(api_key=key)
+    prompt = PROMPTS.get(mode, PROMPT_FULL)
     r = client.messages.create(
         model="claude-haiku-4-5-20251001",
         max_tokens=2000,
         temperature=0.3,
-        system=[{"type": "text", "text": BRIEFING_PROMPT, "cache_control": {"type": "ephemeral"}}],
+        system=[{"type": "text", "text": prompt, "cache_control": {"type": "ephemeral"}}],
         messages=[{"role": "user", "content": context}],
     )
     return "".join(b.text for b in r.content if getattr(b, "type", None) == "text").strip()
@@ -168,18 +237,27 @@ def speak(chunk: str) -> None:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
+    ap.add_argument("--mode", choices=["full", "recent", "momentum"],
+                    default="full", help="Briefing depth and focus.")
+    ap.add_argument("--project", type=Path, default=ROOT,
+                    help="Project directory to brief (default: this project).")
     ap.add_argument("--print", dest="print_only", action="store_true",
                     help="Print the briefing; don't synthesize it.")
     ap.add_argument("--text-only", action="store_true",
                     help="Dump the raw context and exit; skip Claude.")
     args = ap.parse_args()
 
+    project = args.project.expanduser().resolve()
+    if not project.is_dir():
+        sys.stderr.write(f"not a directory: {project}\n")
+        return 2
+
     cfg_path = Path.home() / ".majel_config.json"
     cfg = json.loads(cfg_path.read_text()) if cfg_path.exists() else {}
     key = os.environ.get("ANTHROPIC_API_KEY") or cfg.get("anthropic_api_key")
 
-    sys.stderr.write("[gathering project context…]\n")
-    context = gather_context()
+    sys.stderr.write(f"[gathering context: project={project.name} mode={args.mode}]\n")
+    context = gather_context(project, args.mode)
     sys.stderr.write(f"[context: {len(context)} chars]\n")
 
     if args.text_only:
@@ -190,8 +268,8 @@ def main() -> int:
         sys.stderr.write("no anthropic_api_key in env or ~/.majel_config.json\n")
         return 2
 
-    sys.stderr.write("[calling Claude…]\n")
-    briefing = call_claude(context, key)
+    sys.stderr.write(f"[calling Claude — mode={args.mode}…]\n")
+    briefing = call_claude(context, key, args.mode)
     if not briefing:
         sys.stderr.write("empty briefing from Claude\n")
         return 2
