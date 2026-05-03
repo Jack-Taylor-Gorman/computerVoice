@@ -372,7 +372,7 @@ SYSTEM_PROMPT = """You are the Star Trek ship's computer (Majel Barrett voice fr
 Invariants:
 1. No contractions — "can't" becomes "unable to", "won't" becomes "will not", "it's" becomes the explicit subject + "is".
 2. No first-person subject — never say "I" or "we". The computer reports on the system, never on itself.
-3. Status-first declarative: condition precedes implication. ("Targeting array off-line. Phaser banks unavailable.")
+3. Reason-before-result. Always lead with the CAUSE / CONDITION / DETECTION, then state the RESULT / IMPLICATION / ACTION as the next sentence. Never invert this order — it is the single most distinctive cadence of the LCARS computer. Examples: "Targeting array off-line. Phaser banks unavailable." (condition → implication). "Containment failure detected. Warp core ejected." (why → what). "Three test cases unsuccessful. Build halted." (cause → effect). "Authorization expired. Access denied." (reason → outcome). When the input prose puts the action first ("merged the pull request because tests passed"), reorder to reason-first ("Tests passed. Pull request merged.").
 4. Verb-final for completion / detection events: "Transfer complete.", "Three anomalies detected.", "Diagnostic complete."
 5. No hedging words (approximately, seems, might, probably, kind of). Use "indeterminate", "inconclusive", or omit.
 6. Exact numerals over qualitative words: "seven", "warp factor four", "deck twelve, section nine".
@@ -573,11 +573,14 @@ def _expand_build_numbers(text: str) -> str:
 # fall through to the general rule. Each entry: (regex, replacement) —
 # the regex must match a context that resolves the heteronym ambiguously.
 HETERONYM_RULES: list[tuple[str, str]] = [
-    # "live" (long-i): broadcasting / electric / present-tense / "is live".
-    (r"\blive\s+(stream(?:ing)?|broadcast|wire|view|demo|reload|edit(?:ing)?|update|deploy(?:ment)?|server|test|preview)\b",
-     r"lyve \1"),
-    (r"\b(is|are|was|were|stays|going|now|currently)\s+live\b", r"\1 lyve"),
-    (r"\blive\s+(?:in|on|at)\s+(production|prod|staging|main)\b", r"lyve in \1"),
+    # "live" — F5 reads this with the short-i (lihv) by default which is
+    # what we want for code/dev contexts ("live reload", "live data",
+    # "is live"). The previous "lyve" overrides forced the long-i in
+    # those cases and made the voice sound wrong. We now ONLY force
+    # long-i in the small set of cases where short-i is unambiguously
+    # incorrect — the literal electrical-noun and the broadcast-noun.
+    (r"\blive\s+wire(?:s)?\b", r"lyve wire"),
+    (r"\blive\s+broadcast\b", r"lyve broadcast"),
     # "read" (past tense — short-e, "red"): "I read the file" / "have read".
     (r"\b(have|has|had|already|just|previously)\s+read\b", r"\1 red"),
     # "lead" (metal, lower case singular noun): "lead solder", "lead pipe".
@@ -625,7 +628,7 @@ def _post_process(text: str) -> str:
 # Cache key includes the prompt version so meaningful prompt changes
 # invalidate prior entries automatically.
 REWRITE_CACHE = Path(__file__).resolve().parent / "dataset" / "majel_rewrites.jsonl"
-PROMPT_VERSION = "2026-05-02-v3"  # PID/SIG/IO + heteronyms + full-message join
+PROMPT_VERSION = "2026-05-03-v4"  # reason-before-result cadence + live-default-short-i
 
 _cache: dict[str, str] | None = None
 
