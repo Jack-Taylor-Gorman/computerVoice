@@ -276,6 +276,17 @@ main { padding: 0 18px 24px; max-width: 1180px; margin: 0 auto; }
         </div>
         <audio id="audio-api" preload="metadata" src="audio/api-setup.wav"></audio>
       </div>
+
+      <div class="audio-block">
+        <div class="label">▶ MULTI-SESSION STATUS</div>
+        <div class="desc">Three parallel Claude Code sessions reporting back across three projects — exactly what you would hear on a busy work afternoon.</div>
+        <canvas id="wave-multi"></canvas>
+        <div class="row">
+          <button id="btn-multi" type="button">PLAY ▶</button>
+          <span class="timer" id="t-multi">0:00 / 0:00</span>
+        </div>
+        <audio id="audio-multi" preload="metadata" src="audio/multi-session.wav"></audio>
+      </div>
     </div>
   </section>
 
@@ -370,6 +381,7 @@ EOF
   const blocks = [
     { audio: "audio-intro", btn: "btn-intro", canvas: "wave-intro", timer: "t-intro" },
     { audio: "audio-api",   btn: "btn-api",   canvas: "wave-api",   timer: "t-api"   },
+    { audio: "audio-multi", btn: "btn-multi", canvas: "wave-multi", timer: "t-multi" },
   ];
   const ctx = new (window.AudioContext || window.webkitAudioContext)();
 

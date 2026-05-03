@@ -47,6 +47,13 @@ SAMPLES: list[tuple[str, str]] = [
         "application programming interface. Step four. Restart F five "
         "daemon. Acknowledged.",
     ),
+    (
+        "multi-session",
+        "Project Alpha. Test suite complete. All tests nominal. "
+        "Project Beta. Pull request four five two one merged. Push to "
+        "main branch complete. Project Gamma. Three candidate hosts "
+        "located. Specify selection. Standing by.",
+    ),
 ]
 
 
