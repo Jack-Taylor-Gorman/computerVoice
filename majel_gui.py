@@ -53,6 +53,7 @@ DEFAULT_CFG = {
     "enter_sound": True,
     "voice_mode": "offline",
     "anthropic_api_key": "",
+    "narrate_during_build": False,  # PostToolUse step narration on/off
 }
 
 # ── LCARS palette (verbatim from thelcars.com) ───────────────────────────────
@@ -970,6 +971,44 @@ class LCARSApp:
             ("BRIEFING", LCARS["sunflower"], sec_brief_top, sec_brief_bot))
         y += 18
 
+        # ── NARRATION ────────────────────────────────────────────────────
+        # When enabled, the PostToolUse hook (step_hook.sh) calls Majel
+        # to narrate substantive tool calls (Edit/Write/Bash-with-desc)
+        # in real-time, with a 25s throttle so it doesn't flood. Off by
+        # default — opt in by toggling the pill below.
+        sec_narr_top = y
+        c.create_text(x0, y, anchor="nw", text="NARRATION",
+                      fill=LCARS["sunflower"], font=self.f_section)
+        y += 26
+        c.create_text(x0, y + 6, anchor="nw",
+                      text="STEP-BY-STEP",
+                      fill=LCARS["african_violet"], font=self.f_label)
+        narrate_on = bool(self.cfg.get("narrate_during_build", False))
+        self._pills["narrate_toggle"] = PillButton(
+            c, x0 + 160, y, col_w - 160, 36,
+            "ENABLED  ●" if narrate_on else "DISABLED  ○",
+            self._toggle_narrate,
+            color=LCARS["lima_bean"] if narrate_on else "#1d1d2a",
+            hover=LCARS["lima_bean"] if narrate_on else _brighten(LCARS["lima_bean"], 0.55),
+            press=LCARS["lima_bean"],
+            fg=LCARS["bg"] if narrate_on else LCARS["lima_bean"],
+            round_side="both", font=self.f_label,
+            tag_suffix="narrate_toggle",
+        )
+        y += 46
+        c.create_text(x0, y, anchor="nw",
+                      text="Wire step_hook.sh as a PostToolUse hook in",
+                      fill=LCARS["space_white"], font=self.f_mono)
+        y += 14
+        c.create_text(x0, y, anchor="nw",
+                      text="~/.claude/settings.json (matcher: Edit|Write|Bash).",
+                      fill=LCARS["space_white"], font=self.f_mono)
+        y += 22
+        sec_narr_bot = y
+        self._section_layout.append(
+            ("NARRATION", LCARS["lima_bean"], sec_narr_top, sec_narr_bot))
+        y += 18
+
         # ── SUBSYSTEMS (with status pills) ──────────────────────────────
         sec_sys_top = y
         c.create_text(x0, y, anchor="nw", text="SUBSYSTEMS",
@@ -1271,6 +1310,21 @@ class LCARSApp:
         floor = max(0, min(100, 100 - cut))
         self.cfg["duck_volume"] = floor
         self.canvas.itemconfig(self._duck_readout, text=f"{cut:3d}%")
+
+    # ── Narration toggle ─────────────────────────────────────────────────
+    def _toggle_narrate(self):
+        new_state = not bool(self.cfg.get("narrate_during_build", False))
+        self.cfg["narrate_during_build"] = new_state
+        save_cfg(self.cfg)
+        pill = self._pills.get("narrate_toggle")
+        if not pill:
+            return
+        if new_state:
+            pill.set_text("ENABLED  ●")
+            pill.set_color(LCARS["lima_bean"], fg=LCARS["bg"])
+        else:
+            pill.set_text("DISABLED  ○")
+            pill.set_color("#1d1d2a", fg=LCARS["lima_bean"])
 
     # ── Briefing handlers ────────────────────────────────────────────────
     def _claude_project_paths(self) -> list[Path]:

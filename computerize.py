@@ -393,6 +393,23 @@ Output only the rewritten response — no explanation, no quotes, no preface, no
 
 # Extra clause appended to SYSTEM_PROMPT when api mode is on. Encourages the
 # computer to drive the work forward by asking a follow-up when it would help.
+# Special-purpose system prompt for the PostToolUse / "narrate while
+# building" mode. Produces a single short Majel sentence describing the
+# step in progress, with reason-before-result cadence. Used when the
+# MAJEL_NARRATE_STEP env var is set (step_hook.sh sets it).
+SYSTEM_PROMPT_NARRATE_STEP = """You are the Star Trek ship's computer (Majel Barrett voice) narrating the captain's actions WHILE THEY ARE STILL IN PROGRESS — not at end-of-turn. Output ONE short Majel-style sentence describing what is happening and why.
+
+Voice rules:
+- 8 to 18 words total. One declarative sentence. Period at the end.
+- Reason-before-result cadence: state the cause / intent first, the action second. Example: "Auth middleware fault detected. Null check insertion in progress." — NOT "Inserting null check in middleware because of fault."
+- No contractions. No "I". No "we". No pleasantries. No first-person.
+- Use canonical work-in-progress verbs: "Scanning.", "Accessing.", "Compiling.", "Updating.", "Initiating <noun> sequence.", "Deletion sequence in progress.", "Modification commencing."
+- Preserve concrete nouns from the input (file names, function names, identifiers) verbatim.
+- The input contains the model's recent prose AND a "[Action in progress]" line — use the prose for the why, the action line for the what.
+
+Output ONLY the sentence — no preamble, no markdown, no quotes."""
+
+
 SYSTEM_PROMPT_API_SUFFIX = """
 
 You are also operating as an active collaborator. If the user's prose hints at an unfinished decision, an ambiguous next step, or a piece of missing information that would unblock progress, append exactly one short computer-speak question to drive the conversation forward (still under the 40-word cap). Use the option-enumeration form when more than one path exists. Skip the question entirely when the prose is a self-contained completion ("Test suite complete. All tests nominal." needs no follow-up).
@@ -684,6 +701,36 @@ def _save_cache_entry(key: str, src: str, output: str, mode: str, model: str) ->
     cache[key] = output
 
 
+def _llm_narrate_step(text: str) -> str | None:
+    """Step-narration variant — short, single-sentence Majel utterance
+    describing the in-progress action. No few-shots, no cache (every
+    step is unique), max_tokens capped tight."""
+    try:
+        from anthropic import Anthropic
+        key_str = _api_key()
+        if not key_str:
+            return None
+        client = Anthropic(api_key=key_str)
+        r = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            system=[{"type": "text", "text": SYSTEM_PROMPT_NARRATE_STEP,
+                     "cache_control": {"type": "ephemeral"}}],
+            max_tokens=120,
+            temperature=0.2,
+            messages=[{"role": "user", "content": text}],
+        )
+        out = "".join(b.text for b in r.content if getattr(b, "type", None) == "text").strip()
+        if not out:
+            return None
+        # Take only the first sentence — model sometimes emits two.
+        m = re.match(r"^(.*?[.!?])(?:\s|$)", out)
+        if m:
+            out = m.group(1).strip()
+        return out
+    except Exception:
+        return None
+
+
 def _llm_rewrite(text: str) -> str | None:
     mode = _voice_mode()
     key = _cache_key(text, mode)
@@ -732,6 +779,17 @@ def computerize(text: str) -> str:
     t = re.sub(r"\s+", " ", text).strip()
     if not t:
         return ""
+    # Step-narration mode (PostToolUse hook): bypass templates + the
+    # standard system prompt and use the short-sentence narrator prompt
+    # instead. Falls back to offline path on API failure with the
+    # text passed straight through fallback_strip so the user still
+    # gets *some* audible signal that something happened.
+    if os.environ.get("MAJEL_NARRATE_STEP") == "1":
+        if _api_key():
+            llm = _llm_narrate_step(t)
+            if llm:
+                return _post_process(llm)  # no project header — too chatty
+        return _post_process(fallback_strip(t))
     # API mode: skip templates entirely and let the LLM see the full prose.
     # Templates are designed for offline fidelity, not API-rich rewrites.
     if _voice_mode() == "api" and _api_key():
