@@ -48,7 +48,10 @@ pkill -f "$DIR/f5_daemon.py" 2>/dev/null
     fi
 
     if ! ([ -f "$F5_PID" ] && kill -0 "$(cat "$F5_PID")" 2>/dev/null); then
-        nohup "$DIR/venv/bin/python" "$DIR/f5_daemon.py" >/tmp/majel_f5_daemon.log 2>&1 &
+        # Wrap in run_f5_daemon.sh — its while-true loop respawns the
+        # daemon if it crashes (CUDA OOM etc.) so /tmp/majel_f5.sock
+        # stays alive across most failure modes.
+        nohup bash "$DIR/run_f5_daemon.sh" >/dev/null 2>&1 &
         echo $! > "$F5_PID"
         disown
     fi

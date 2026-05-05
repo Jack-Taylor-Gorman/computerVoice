@@ -48,12 +48,17 @@ def restore_background() -> None:
 def _mic_in_use() -> bool:
     """Return True if a real voice capture is active (e.g. chat STT).
 
-    Skips false positives from PipeWire / GNOME's internal peak-meter
-    streams which run at very low sample rates (25 Hz, 100 Hz) — those
-    are visualizers, not the user dictating. A real mic capture runs at
-    >=8 kHz. Override via MAJEL_IGNORE_MIC=1.
+    Disabled by default — most users keep chat STT armed all the time,
+    which kept silencing every utterance. Opt back in by setting
+    MAJEL_RESPECT_MIC=1 if you want voice to halt while dictating;
+    flock-serialization already prevents Majel from talking over an
+    in-flight utterance, so this is now strictly a politeness setting.
+    The historical MAJEL_IGNORE_MIC=1 override is preserved for clarity
+    but is no longer the way to disable the check.
     """
     if os.environ.get("MAJEL_IGNORE_MIC") == "1":
+        return False
+    if os.environ.get("MAJEL_RESPECT_MIC") != "1":
         return False
     try:
         r = subprocess.run(
@@ -281,14 +286,22 @@ def main() -> int:
         return 0
     text = text[:MAX_CHARS]
 
-    # Halt-during-STT: if the user is recording right now (chat speech-to-
-    # text, voice notes, etc.), bail silently so Majel doesn't talk over
-    # them. Set MAJEL_IGNORE_MIC=1 to disable this guard.
+    # Halt-during-STT: only fires when MAJEL_RESPECT_MIC=1 is set
+    # (default off). Loud-fail with a low double-beep so the user knows
+    # we heard them and stayed quiet — silence-is-failure was the
+    # diagnosis the user kept hitting.
     if _mic_in_use():
         dbg = os.environ.get("MAJEL_LOG")
         if dbg:
             with open(dbg, "a") as f:
                 f.write("skip: mic in use (likely chat STT)\n")
+        try:
+            low_beep = ROOT / "sounds" / "computer" / "computerbeep_30.mp3"
+            if low_beep.exists():
+                play(str(low_beep))
+                play(str(low_beep))
+        except Exception:
+            pass
         return 0
 
     # Voice every turn — no beep-only short-circuits. The rewriter guarantees
@@ -338,11 +351,18 @@ def main() -> int:
                 finally:
                     restore_background()
                 return 0
-            # F5 daemon unreachable or threw — fall through to legacy stack.
+            # F5 daemon unreachable or threw — fall through to legacy
+            # stack. Audible cue: alert03 (descending tone) so the user
+            # knows the primary backend is down and we're attempting RVC.
             dbg = os.environ.get("MAJEL_LOG")
             if dbg:
                 with open(dbg, "a") as f:
                     f.write("f5: daemon unavailable, falling back to RVC\n")
+            try:
+                if ALERT_INFO_NEEDED.exists():
+                    play(str(ALERT_INFO_NEEDED))
+            except Exception:
+                pass
 
     with tempfile.TemporaryDirectory() as td:
         src = os.path.join(td, "src.mp3")
@@ -410,4 +430,16 @@ if __name__ == "__main__":
         sys.exit(main())
     except Exception as e:
         sys.stderr.write(f"speak.py error: {e}\n")
+        # Triple-beep so the user audibly hears "all voice paths dead —
+        # fix me" instead of pure silence + an entry in a log they will
+        # never check. Loud-fail per council recommendation.
+        try:
+            import time as _time
+            triple_beep = ROOT / "sounds" / "computer" / "computerbeep_55.mp3"
+            if triple_beep.exists():
+                for _ in range(3):
+                    play(str(triple_beep))
+                    _time.sleep(0.08)
+        except Exception:
+            pass
         sys.exit(1)
