@@ -82,18 +82,15 @@ def handle(conn: socket.socket, f5: F5TTS) -> None:
         if not text:
             conn.sendall(b'{"ok": false, "err": "empty text"}\n')
             return
-        # F5's duration estimator under-predicts the tail when gen_text
-        # is much longer than ref_text and SPEED < 1.0 (we run at 0.7),
-        # which clips the last word or two of long utterances. Force a
-        # terminal period and append several trailing pause tokens so the
-        # estimator over-allocates frames; the extra tokens render as
-        # natural end-of-sentence silence so there's no audible artefact.
-        # Doubled to 5 pause groups for high-headroom safety after the
-        # user reported the tail was still being clipped occasionally.
+        # Force a terminal period so the model has a clear stop token.
+        # Do NOT pad with extra "." pause tokens — F5 fills the
+        # over-allocated frames with hallucinated sound rather than
+        # silence, producing a gibberish tail. Tail-completeness is
+        # instead enforced by the post-generation ffmpeg apad below
+        # which appends real PCM silence to the output WAV.
         gen_text = text
         if not gen_text.endswith((".", "!", "?")):
             gen_text += "."
-        gen_text += "   . . . . . . . . . ."
         with _lock:
             f5.infer(
                 ref_file=str(REF_AUDIO),
