@@ -23,8 +23,16 @@ def strip(text: str) -> str:
     t = re.sub(r"^#{1,6}\s+", "", t, flags=re.MULTILINE)
     t = re.sub(r"^\s*[-*+]\s+", "", t, flags=re.MULTILINE)
     t = re.sub(r"^\s*\d+\.\s+", "", t, flags=re.MULTILINE)
-    # Bare punctuation that has no spoken form.
-    t = re.sub(r"[_~>|]", " ", t)
+    # Bare punctuation that has no spoken form. F5 voices these
+    # phonetically as the WORD ("bracket", "parenthesis", "equals")
+    # which is never what we want — the rewriter wouldn't have written
+    # them if it meant the word, only the symbol.
+    t = re.sub(r"[_~<>|()\[\]{}=&@#\$\^\\/+]", " ", t)
+    # Mathematical / typographic glyphs F5 also tends to verbalize.
+    t = re.sub(r"[≤≥≠≈±×÷™®©°§¶†‡]", " ", t)
+    # Smart quotes → ASCII quotes (TTS reads them better).
+    t = re.sub(r"[“”„]", '"', t)
+    t = re.sub(r"[‘’‚]", "'", t)
     # ── Pronunciation-artefact filters (post-strip cleanup) ──────────
     # Arrows + bullet glyphs that F5 reads phonetically as "p" / weird
     # artefacts. Replace with a sentence-pause comma so cadence stays.
