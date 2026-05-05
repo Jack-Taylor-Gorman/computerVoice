@@ -335,6 +335,13 @@ def main() -> int:
     if not backend:
         backend = "f5"
     if backend == "f5":
+        # Pre-generation sanity log: write the exact text being sent to
+        # F5 so any future "weird artefact" complaints are traceable to
+        # whether the input was already corrupt vs. F5 hallucinating.
+        dbg = os.environ.get("MAJEL_LOG")
+        if dbg:
+            with open(dbg, "a") as f:
+                f.write(f"f5 input ({len(text)}c): {text!r}\n")
         with tempfile.TemporaryDirectory() as td:
             f5_out = os.path.join(td, "out.wav")
             if infer_via_f5_daemon(text, f5_out, timeout=120.0):
