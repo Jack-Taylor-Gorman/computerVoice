@@ -85,13 +85,15 @@ def handle(conn: socket.socket, f5: F5TTS) -> None:
         # F5's duration estimator under-predicts the tail when gen_text
         # is much longer than ref_text and SPEED < 1.0 (we run at 0.7),
         # which clips the last word or two of long utterances. Force a
-        # terminal period and append a few trailing pause tokens so the
+        # terminal period and append several trailing pause tokens so the
         # estimator over-allocates frames; the extra tokens render as
         # natural end-of-sentence silence so there's no audible artefact.
+        # Doubled to 5 pause groups for high-headroom safety after the
+        # user reported the tail was still being clipped occasionally.
         gen_text = text
         if not gen_text.endswith((".", "!", "?")):
             gen_text += "."
-        gen_text += "   . . ."
+        gen_text += "   . . . . . . . . . ."
         with _lock:
             f5.infer(
                 ref_file=str(REF_AUDIO),
@@ -102,6 +104,24 @@ def handle(conn: socket.socket, f5: F5TTS) -> None:
                 remove_silence=False,
                 speed=SPEED,
             )
+        # Belt-and-suspenders: append 500ms of silence to the output WAV
+        # so even if F5 itself produced a slightly-clipped tail, the
+        # final played audio definitely carries the last syllable
+        # through to natural end-of-sentence silence. ffmpeg apad is
+        # cheap (no re-encoding of the body, just a tail extension).
+        try:
+            import subprocess as _sp, tempfile as _tf, shutil as _sh, os as _os
+            tmp_pad = dst + ".pad.wav"
+            _sp.run(
+                ["ffmpeg", "-y", "-loglevel", "error", "-i", dst,
+                 "-af", "apad=pad_dur=0.5",
+                 "-c:a", "pcm_s16le", tmp_pad],
+                check=True,
+            )
+            _sh.move(tmp_pad, dst)
+        except Exception:
+            # Padding failure isn't fatal — original WAV stays in place.
+            pass
         conn.sendall(b'{"ok": true}\n')
     except Exception as e:
         try:
