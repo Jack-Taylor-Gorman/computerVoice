@@ -3,7 +3,7 @@
 # the assistant is still working, not just at end-of-turn.
 #
 # Wire this in ~/.claude/settings.json under PostToolUse:
-#   { "matcher": "Edit|Write|NotebookEdit|Bash", "hooks": [
+#   { "matcher": "Edit|Write|NotebookEdit|MultiEdit|Bash", "hooks": [
 #       { "type": "command",
 #         "command": "/home/jackgorman/Desktop/Claude_Projects/computerVoice/step_hook.sh" } ] }
 #
@@ -13,6 +13,8 @@
 #
 # Throttle: skips if the last narration fired less than NARRATE_MIN_GAP
 # seconds ago, so a burst of edits doesn't produce a wall of speech.
+# The throttle file is read+written under an exclusive flock so two
+# concurrent PostToolUse hooks can't both pass the gate.
 set -e
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG=/tmp/majel_step.log
@@ -20,15 +22,22 @@ exec 2>>"$LOG"
 export PYTHONNOUSERSITE=1
 
 NARRATE_MIN_GAP="${NARRATE_MIN_GAP:-25}"  # seconds between narrations
-LAST_TS=/tmp/majel_step_last.ts
 
+# Read the entire JSON payload from stdin as raw bytes. Pass to the
+# Python child via environment variable — NEVER via shell-string
+# interpolation into a heredoc. The payload comes from the model's
+# tool_input which can contain arbitrary characters, including triple
+# quotes and backslashes; interpolating those into Python source is a
+# sandbox escape ("""+__import__('os').system('id')+"""). Env vars
+# are bytes and Python reads them as opaque strings, so injection is
+# impossible by construction.
 PAYLOAD="$(cat)"
 
-# Toggle check + throttle + tool-filter + intent-extraction all in one
-# Python pass so we make the speak.py decision atomically.
-NARRATION="$("$DIR/venv/bin/python" - <<PY
-import json, os, sys, time
-payload_raw = """$PAYLOAD"""
+NARRATION="$(MAJEL_PAYLOAD="$PAYLOAD" \
+              MAJEL_NARRATE_MIN_GAP="$NARRATE_MIN_GAP" \
+              "$DIR/venv/bin/python" - <<'PY'
+import fcntl, json, os, sys, time
+payload_raw = os.environ.get("MAJEL_PAYLOAD", "")
 try:
     payload = json.loads(payload_raw)
 except Exception:
@@ -47,18 +56,10 @@ if not cfg.get("voice_enabled", True):
 if not cfg.get("narrate_during_build", False):
     sys.exit(0)
 
-# 2) Throttle.
-now = time.time()
-last = 0.0
-ts_path = "$LAST_TS"
-try:
-    last = float(open(ts_path).read().strip())
-except Exception:
-    pass
-if now - last < $NARRATE_MIN_GAP:
-    sys.exit(0)
-
-# 3) Tool filter — only narrate substantive actions.
+# 2) Tool filter — only narrate substantive actions. Run filter BEFORE
+#    the throttle so non-substantive tools don't even consume the
+#    throttle window (otherwise a burst of Read calls could starve the
+#    next real Edit narration).
 tool = (payload.get("tool_name") or "").strip()
 SUBSTANTIVE = {"Edit", "Write", "NotebookEdit", "MultiEdit"}
 if tool not in SUBSTANTIVE and tool != "Bash":
@@ -74,13 +75,45 @@ elif tool == "Write":
 elif tool == "NotebookEdit":
     brief_input = f"NotebookEdit {os.path.basename(file_path)}"
 elif tool == "Bash":
-    cmd = (ti.get("command") or "").strip().splitlines()[0][:140]
+    cmd = (ti.get("command") or "").strip()
     desc = (ti.get("description") or "").strip()[:140]
-    # Only narrate Bash when it has a description (i.e. the assistant
-    # bothered to label it) — otherwise it's likely exploratory.
     if not desc:
         sys.exit(0)
+    # Trivial-command denylist — these are ergonomic noise even when the
+    # assistant labelled them. "cd /path", "pwd", "ls", "which X", "echo
+    # ..." narrations are pure clutter.
+    first = cmd.split() and cmd.split()[0] or ""
+    TRIVIAL = {"cd", "pwd", "ls", "which", "echo", "true", "false", ":"}
+    if first in TRIVIAL:
+        sys.exit(0)
     brief_input = f"Bash: {desc}"
+
+# 3) Throttle — under an exclusive flock so two concurrent PostToolUse
+#    invocations cannot both pass the gate. The lock auto-releases on
+#    process exit. Timestamp is written BEFORE the LLM call so the
+#    next race competitor sees a fresh ts even if our LLM call hangs.
+ts_path = "/tmp/majel_step_last.ts"
+lock_path = "/tmp/majel_step.lock"
+gap = float(os.environ.get("MAJEL_NARRATE_MIN_GAP", "25"))
+lock_fh = open(lock_path, "w")
+try:
+    fcntl.flock(lock_fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+except BlockingIOError:
+    sys.exit(0)
+now = time.time()
+last = 0.0
+try:
+    last = float(open(ts_path).read().strip() or 0)
+except Exception:
+    pass
+if now - last < gap:
+    sys.exit(0)
+try:
+    open(ts_path, "w").write(str(now))
+except Exception:
+    pass
+# Don't release the flock until process exit — keeps any LLM-stalled
+# concurrent hook from sneaking in just because we wrote the ts.
 
 # 4) Intent context — most recent assistant text BEFORE this tool use,
 #    so the narration captures the model's stated reason ("Now I'll fix
@@ -107,18 +140,12 @@ except Exception:
     pass
 
 # Trim recent_text to one or two sentences for context.
-sentences = recent_text.replace("\\n", " ").split(". ")
+sentences = recent_text.replace("\n", " ").split(". ")
 recent_brief = ". ".join(sentences[-2:])[:300]
 
 # 5) Compose the input prose for the rewriter.
-prose = f"{recent_brief}\\n\\n[Action in progress] {brief_input}"
+prose = f"{recent_brief}\n\n[Action in progress] {brief_input}"
 print(prose)
-
-# 6) Update throttle timestamp now so concurrent invocations skip.
-try:
-    open(ts_path, "w").write(str(now))
-except Exception:
-    pass
 PY
 )"
 
