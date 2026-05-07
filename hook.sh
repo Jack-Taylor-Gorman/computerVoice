@@ -55,7 +55,7 @@ PY
 # (~/.claude/projects/-home-jackgorman-Desktop-Claude-Projects-computerVoice/...)
 # so the rewriter can prepend a "Project <name>." header to every utterance.
 PROJECT_NAME="$("$DIR/venv/bin/python" - "$TRANSCRIPT" <<'PY'
-import os, re, sys
+import json, os, re, sys
 p = sys.argv[1]
 # transcript path: .../projects/<slug>/<session>.jsonl
 parts = p.split(os.sep)
@@ -64,14 +64,45 @@ if "projects" in parts:
     i = parts.index("projects")
     if i + 1 < len(parts):
         slug = parts[i + 1]
-# Slug format: leading "-" then path components joined by "-".
-# e.g. "-home-jackgorman-Desktop-Claude-Projects-computerVoice"
-# Take the LAST component as the project name.
-name = slug.lstrip("-").split("-")[-1] if slug else ""
-# Camel/snake/kebab → spaced words, Title-Cased.
-name = re.sub(r"([a-z])([A-Z])", r"\1 \2", name)
-name = re.sub(r"[_\-]+", " ", name).strip()
-name = " ".join(w.capitalize() for w in name.split())
+
+# Override sources, in priority order:
+#   1. <project_root>/.majel_name file (single line) — checked in to
+#      the repo if you want it shared, .gitignored if private.
+#   2. ~/.majel_project_names.json — { "<slug>": "Spoken Name" } map,
+#      handy for non-clonable folders or when you don't want a file
+#      in the repo.
+#   3. Auto-derived from the slug's last path component (the original
+#      behavior), Title-Cased and camel-split.
+
+real_path = "/" + slug.lstrip("-").replace("-", "/") if slug else ""
+name = ""
+
+# 1) Per-project file override.
+if real_path and os.path.isdir(real_path):
+    cand = os.path.join(real_path, ".majel_name")
+    if os.path.exists(cand):
+        try:
+            name = open(cand).read().strip().splitlines()[0].strip()
+        except OSError:
+            pass
+
+# 2) Global map override.
+if not name:
+    cfg_path = os.path.expanduser("~/.majel_project_names.json")
+    if os.path.exists(cfg_path):
+        try:
+            mp = json.load(open(cfg_path))
+            name = (mp.get(slug) or "").strip()
+        except (json.JSONDecodeError, OSError):
+            pass
+
+# 3) Auto-derive fallback.
+if not name:
+    name = slug.lstrip("-").split("-")[-1] if slug else ""
+    name = re.sub(r"([a-z])([A-Z])", r"\1 \2", name)
+    name = re.sub(r"[_\-]+", " ", name).strip()
+    name = " ".join(w.capitalize() for w in name.split())
+
 print(name)
 PY
 )"
