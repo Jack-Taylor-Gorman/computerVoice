@@ -17,6 +17,7 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SFX_PID="$DIR/.voice_sfx.pid"
 BG_PID="$DIR/.background.pid"
 F5_PID="$DIR/.majel_f5_daemon.pid"
+LOOP_PID="$DIR/.loop_watcher.pid"
 LOCK="$DIR/.session.lock"
 
 # Drop any prior PID files / sockets / locks for daemons we're about to
@@ -53,6 +54,18 @@ pkill -f "$DIR/f5_daemon.py" 2>/dev/null
         # stays alive across most failure modes.
         nohup bash "$DIR/run_f5_daemon.sh" >/dev/null 2>&1 &
         echo $! > "$F5_PID"
+        disown
+    fi
+
+    # Stuck-loop detector — watches Claude transcript JSONLs and fires
+    # one Majel alert when the agent gets stuck on the same file/cmd.
+    # Off by default (loop_watcher_enabled in ~/.majel_config.json);
+    # always autostart it so toggling the GUI pill takes effect live
+    # without needing a session restart.
+    if ! ([ -f "$LOOP_PID" ] && kill -0 "$(cat "$LOOP_PID")" 2>/dev/null); then
+        nohup "$DIR/venv/bin/python" "$DIR/loop_watcher.py" \
+            >/tmp/majel_loop_watcher.log 2>&1 &
+        echo $! > "$LOOP_PID"
         disown
     fi
 ) 9>"$LOCK"

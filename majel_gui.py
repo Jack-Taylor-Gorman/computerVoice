@@ -37,10 +37,11 @@ BG_DIR = ROOT / "sounds" / "background"
 TREK_DB = ROOT / "storage" / "trekdata.sqlite"
 
 DAEMONS = {
-    "background.py": "BACKGROUND AMBIENT",
-    "voice_sfx.py":  "KEYBOARD SFX",
-    "f5_daemon.py":  "F5-TTS VOICE DAEMON",
-    "tty_watcher.py": "APPROVAL CHIME",
+    "background.py":   "BACKGROUND AMBIENT",
+    "voice_sfx.py":    "KEYBOARD SFX",
+    "f5_daemon.py":    "F5-TTS VOICE DAEMON",
+    "tty_watcher.py":  "APPROVAL CHIME",
+    "loop_watcher.py": "STUCK-LOOP DETECTOR",
 }
 
 DEFAULT_CFG = {
@@ -54,6 +55,7 @@ DEFAULT_CFG = {
     "voice_mode": "offline",
     "anthropic_api_key": "",
     "narrate_during_build": False,  # PostToolUse step narration on/off
+    "loop_watcher_enabled": False,  # Stuck-loop detector on/off
 }
 
 # ── LCARS palette (verbatim from thelcars.com) ───────────────────────────────
@@ -996,12 +998,32 @@ class LCARSApp:
             tag_suffix="narrate_toggle",
         )
         y += 46
+        # Stuck-loop detector — fires "Caution. <file> loop detected.
+        # N iterations. No progress detected." when the agent has been
+        # spinning. Auto-launched by session_start.sh so flipping this
+        # pill takes effect live without restarting anything.
+        c.create_text(x0, y + 6, anchor="nw",
+                      text="STUCK-LOOP",
+                      fill=LCARS["african_violet"], font=self.f_label)
+        loop_on = bool(self.cfg.get("loop_watcher_enabled", False))
+        self._pills["loop_toggle"] = PillButton(
+            c, x0 + 160, y, col_w - 160, 36,
+            "ENABLED  ●" if loop_on else "DISABLED  ○",
+            self._toggle_loop_watcher,
+            color=LCARS["lima_bean"] if loop_on else "#1d1d2a",
+            hover=LCARS["lima_bean"] if loop_on else _brighten(LCARS["lima_bean"], 0.55),
+            press=LCARS["lima_bean"],
+            fg=LCARS["bg"] if loop_on else LCARS["lima_bean"],
+            round_side="both", font=self.f_label,
+            tag_suffix="loop_toggle",
+        )
+        y += 46
         c.create_text(x0, y, anchor="nw",
-                      text="Wire step_hook.sh as a PostToolUse hook in",
+                      text="Step hook: wire step_hook.sh as PostToolUse",
                       fill=LCARS["space_white"], font=self.f_mono)
         y += 14
         c.create_text(x0, y, anchor="nw",
-                      text="~/.claude/settings.json (matcher: Edit|Write|Bash).",
+                      text="in ~/.claude/settings.json. Loop detector: auto.",
                       fill=LCARS["space_white"], font=self.f_mono)
         y += 22
         sec_narr_bot = y
@@ -1310,6 +1332,21 @@ class LCARSApp:
         floor = max(0, min(100, 100 - cut))
         self.cfg["duck_volume"] = floor
         self.canvas.itemconfig(self._duck_readout, text=f"{cut:3d}%")
+
+    # ── Loop-watcher toggle ──────────────────────────────────────────────
+    def _toggle_loop_watcher(self):
+        new_state = not bool(self.cfg.get("loop_watcher_enabled", False))
+        self.cfg["loop_watcher_enabled"] = new_state
+        save_cfg(self.cfg)
+        pill = self._pills.get("loop_toggle")
+        if not pill:
+            return
+        if new_state:
+            pill.set_text("ENABLED  ●")
+            pill.set_color(LCARS["lima_bean"], fg=LCARS["bg"])
+        else:
+            pill.set_text("DISABLED  ○")
+            pill.set_color("#1d1d2a", fg=LCARS["lima_bean"])
 
     # ── Narration toggle ─────────────────────────────────────────────────
     def _toggle_narrate(self):
