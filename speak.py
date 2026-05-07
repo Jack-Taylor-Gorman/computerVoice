@@ -358,18 +358,25 @@ def main() -> int:
                 finally:
                     restore_background()
                 return 0
-            # F5 daemon unreachable or threw — fall through to legacy
-            # stack. Audible cue: alert03 (descending tone) so the user
-            # knows the primary backend is down and we're attempting RVC.
+            # F5 daemon unreachable. Stop here and play the descending-
+            # tone alert so the user audibly hears "primary backend
+            # down". Do NOT fall through to the RVC stack — it's
+            # permanently broken on this system (rvc_python pipeline
+            # throws 'tuple' object has no attribute 'dtype' regardless
+            # of joblib), and the resulting fatal speak.py exception
+            # was producing the triple-beep diagnostic on every turn.
+            # The watchdog (run_f5_daemon.sh) already auto-respawns
+            # F5 within ~5 seconds, so the next utterance recovers.
             dbg = os.environ.get("MAJEL_LOG")
             if dbg:
                 with open(dbg, "a") as f:
-                    f.write("f5: daemon unavailable, falling back to RVC\n")
+                    f.write("f5: daemon unavailable; alert + bail (no RVC fallback)\n")
             try:
                 if ALERT_INFO_NEEDED.exists():
                     play(str(ALERT_INFO_NEEDED))
             except Exception:
                 pass
+            return 0
 
     with tempfile.TemporaryDirectory() as td:
         src = os.path.join(td, "src.mp3")
