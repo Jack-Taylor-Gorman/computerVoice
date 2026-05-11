@@ -590,7 +590,7 @@ class LCARSApp:
             for i, (label, color, _ytop, _ybot) in enumerate(self._section_layout):
                 py_top = splits[i]
                 py_bot = splits[i + 1]
-                if py_bot - py_top < 12:
+                if py_bot - py_top < 4:
                     continue
                 c.create_rectangle(0, py_top, RAIL_W, py_bot,
                                    fill=color, outline=color, tags="chrome")
@@ -639,7 +639,7 @@ class LCARSApp:
         sec_voice_top = y
         c.create_text(x0, y, anchor="nw", text="VOICE OPERATIONS",
                       fill=LCARS["sunflower"], font=self.f_section)
-        y += 26
+        y += 22
 
         # Voice ops row: three pills flush together, spanning full content width.
         self.voice_var = tk.BooleanVar(value=self.cfg["voice_enabled"])
@@ -675,13 +675,13 @@ class LCARSApp:
         sec_voice_bot = y
         self._section_layout.append(
             ("VOICE", LCARS["african_violet"], sec_voice_top, sec_voice_bot))
-        y += 12
+        y += 8
 
         # ── VOICE MODE ───────────────────────────────────────────────────
         sec_mode_top = y
         c.create_text(x0, y, anchor="nw", text="VOICE MODE",
                       fill=LCARS["sunflower"], font=self.f_section)
-        y += 26
+        y += 22
         self.mode_var = tk.StringVar(value=self.cfg.get("voice_mode", "offline"))
         half = col_w // 2
         self._mode_btn_pos = {
@@ -728,13 +728,13 @@ class LCARSApp:
         sec_mode_bot = y
         self._section_layout.append(
             ("MODE", LCARS["lilac"], sec_mode_top, sec_mode_bot))
-        y += 14
+        y += 8
 
         # ── AUDIO LEVELS ─────────────────────────────────────────────────
         sec_audio_top = y
         c.create_text(x0, y, anchor="nw", text="AUDIO LEVELS",
                       fill=LCARS["sunflower"], font=self.f_section)
-        y += 26
+        y += 22
 
         s = ttk.Style()
         try:
@@ -786,13 +786,13 @@ class LCARSApp:
         sec_audio_bot = y
         self._section_layout.append(
             ("AUDIO", LCARS["butterscotch"], sec_audio_top, sec_audio_bot))
-        y += 14
+        y += 8
 
         # ── MUSIC PROGRAM ────────────────────────────────────────────────
         sec_music_top = y
         c.create_text(x0, y, anchor="nw", text="MUSIC PROGRAM",
                       fill=LCARS["sunflower"], font=self.f_section)
-        y += 26
+        y += 22
 
         # Group cycler row: PREV / CURRENT / NEXT, fills full content width,
         # with the middle (current track display) square on both ends.
@@ -889,7 +889,7 @@ class LCARSApp:
         sec_music_bot = y
         self._section_layout.append(
             ("MUSIC", LCARS["bluey"], sec_music_top, sec_music_bot))
-        y += 18
+        y += 10
 
         # ── BRIEFING ─────────────────────────────────────────────────────
         # Trigger a Majel-voice project briefing. Pick a project (defaults
@@ -899,7 +899,7 @@ class LCARSApp:
         sec_brief_top = y
         c.create_text(x0, y, anchor="nw", text="BRIEFING",
                       fill=LCARS["sunflower"], font=self.f_section)
-        y += 26
+        y += 22
 
         # State init.
         if not hasattr(self, "_briefing_project"):
@@ -971,7 +971,7 @@ class LCARSApp:
         sec_brief_bot = y
         self._section_layout.append(
             ("BRIEFING", LCARS["sunflower"], sec_brief_top, sec_brief_bot))
-        y += 18
+        y += 10
 
         # ── NARRATION ────────────────────────────────────────────────────
         # When enabled, the PostToolUse hook (step_hook.sh) calls Majel
@@ -1035,7 +1035,7 @@ class LCARSApp:
         sec_sys_top = y
         c.create_text(x0, y, anchor="nw", text="SUBSYSTEMS",
                       fill=LCARS["sunflower"], font=self.f_section)
-        y += 26
+        y += 22
 
         self._svc_status_pills: dict[str, PillButton] = {}
         ROW_H = 30
@@ -1058,24 +1058,24 @@ class LCARSApp:
         sec_sys_bot = y
         self._section_layout.append(
             ("SUBSYS", LCARS["sky"], sec_sys_top, sec_sys_bot))
-        y += 14
+        y += 8
 
         # ── STARTUP (autostart toggle) ──────────────────────────────────
         sec_startup_top = y
         c.create_text(x0, y, anchor="nw", text="STARTUP",
                       fill=LCARS["sunflower"], font=self.f_section)
-        y += 26
+        y += 32
 
         on_now = autostart_enabled()
         self._pills["autostart_toggle"] = PillButton(
-            c, x0, y, col_w, 38,
+            c, x0, y, col_w, 50,
             "AUTOSTART: ON" if on_now else "AUTOSTART: OFF",
             self._on_autostart_toggle,
             color=LCARS["orange"] if on_now else LCARS["red"],
             round_side="both", font=self.f_label,
             tag_suffix="autostart_toggle",
         )
-        y += 50
+        y += 66
         sec_startup_bot = y
         self._section_layout.append(
             ("STARTUP", LCARS["orange"], sec_startup_top, sec_startup_bot))
