@@ -286,6 +286,26 @@ def main() -> int:
         return 0
     text = text[:MAX_CHARS]
 
+    # Latest-wins: by the time we hold the flock, a newer response for this
+    # same session may have already queued behind us. hook.sh stamps each
+    # request with a monotonic token in MAJEL_REQ_FILE; if the file now holds
+    # a different token, we're a stale backlog entry — drop ourselves so the
+    # user hears the CURRENT reply instead of an old one. (See hook.sh.)
+    req_token = os.environ.get("MAJEL_REQ_TOKEN")
+    req_file = os.environ.get("MAJEL_REQ_FILE")
+    if req_token and req_file:
+        try:
+            current = Path(req_file).read_text().strip()
+            if current and current != req_token:
+                dbg = os.environ.get("MAJEL_LOG")
+                if dbg:
+                    with open(dbg, "a") as f:
+                        f.write(f"skip: stale utterance (token={req_token} "
+                                f"superseded by {current})\n")
+                return 0
+        except OSError:
+            pass
+
     # Halt-during-STT: only fires when MAJEL_RESPECT_MIC=1 is set
     # (default off). Loud-fail with a low double-beep so the user knows
     # we heard them and stayed quiet — silence-is-failure was the

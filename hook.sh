@@ -117,8 +117,21 @@ echo "$(date +%H:%M:%S.%3N) CLEAN=$CLEAN" >>"$LOG"
 # invocation grabs an exclusive flock on /tmp/majel_speak.lock before it
 # starts. flock blocks (no -n), so utterances queue rather than overlap
 # or get dropped. The lock auto-releases when speak.py exits.
-echo "$(date +%H:%M:%S.%3N) queuing speak.py via flock" >>"$LOG"
+#
+# Latest-wins staleness: synthesis+playback can be slower than the gap
+# between responses, so utterances pile up behind the flock and you end
+# up perpetually hearing an OLDER queued reply ("always one behind").
+# To fix that, each response registers a monotonic token in a per-session
+# file. speak.py re-reads that file once it acquires the lock; if a newer
+# response has registered since, this utterance is stale and drops itself.
+# Scoped per session (hash of transcript path) so two terminals finishing
+# at once don't cancel each other — only same-session backlog collapses.
+REQ_KEY="$(printf '%s' "$TRANSCRIPT" | md5sum | cut -d' ' -f1)"
+REQ_FILE="/tmp/majel_speak.latest.$REQ_KEY"
+REQ_TOKEN="$(date +%s%N)"
+printf '%s' "$REQ_TOKEN" > "$REQ_FILE"
+echo "$(date +%H:%M:%S.%3N) queuing speak.py via flock (token=$REQ_TOKEN)" >>"$LOG"
 
-nohup bash -c "MAJEL_LOG=/tmp/majel_speak.log printf '%s' \"\$0\" | MAJEL_LOG=/tmp/majel_speak.log flock /tmp/majel_speak.lock '$DIR/venv/bin/python' '$DIR/speak.py' >>/tmp/majel_speak.log 2>&1" "$CLEAN" </dev/null >/dev/null 2>&1 &
+nohup bash -c "MAJEL_LOG=/tmp/majel_speak.log printf '%s' \"\$0\" | MAJEL_LOG=/tmp/majel_speak.log MAJEL_REQ_TOKEN='$REQ_TOKEN' MAJEL_REQ_FILE='$REQ_FILE' flock /tmp/majel_speak.lock '$DIR/venv/bin/python' '$DIR/speak.py' >>/tmp/majel_speak.log 2>&1" "$CLEAN" </dev/null >/dev/null 2>&1 &
 disown
 exit 0
