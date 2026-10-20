@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Download the Majel runtime assets (RVC voice model + sounds/) from a
-# GitHub Release and extract them into the project root.
+# Download the Majel runtime assets (F5 voice model, legacy RVC model,
+# sounds/) from a GitHub Release and extract them into the project root.
 #
 #   scripts/fetch_assets.sh                 # latest release
 #   scripts/fetch_assets.sh assets-v2       # specific tag
@@ -43,15 +43,18 @@ trap 'rm -rf "$WORK"' EXIT
 
 echo "[1/3] downloading assets from $TAG"
 gh release download "$TAG" \
+  --pattern 'majel-f5.tar' \
   --pattern 'majel-model.tar.gz' \
   --pattern 'majel-sounds.tar.gz' \
   --pattern 'CHECKSUMS.txt' \
   --dir "$WORK"
 
 echo "[2/3] verifying checksums"
-( cd "$WORK" && sha256sum -c CHECKSUMS.txt )
+# Older releases (assets-v1) have no F5 archive; check only what was downloaded.
+( cd "$WORK" && sha256sum -c --ignore-missing CHECKSUMS.txt )
 
 echo "[3/3] extracting into $ROOT"
+[[ -f "$WORK/majel-f5.tar" ]] && tar xf "$WORK/majel-f5.tar" -C "$ROOT"
 tar xzf "$WORK/majel-model.tar.gz"  -C "$ROOT"
 tar xzf "$WORK/majel-sounds.tar.gz" -C "$ROOT"
 

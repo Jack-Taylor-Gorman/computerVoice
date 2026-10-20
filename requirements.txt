@@ -1,0 +1,12 @@
+# Runtime for the F5 voice server, rewriter and sound effects (Python 3.10).
+f5-tts==1.1.20
+torch==2.8.0
+torchaudio==2.8.0
+safetensors>=0.7
+numpy<2
+soundfile>=0.13
+librosa
+edge-tts>=7.2
+pynput>=1.7
+# Optional: the API voice mode in computerize.py.
+anthropic>=0.86
