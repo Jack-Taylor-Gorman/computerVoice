@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Severian Control
+Comment=Volume, ambient, and service controls for the Severian narrator voice system
+Exec="/home/jackgorman/Desktop/Claude_Projects/computerVoice (copy)/venv/bin/python" "/home/jackgorman/Desktop/Claude_Projects/computerVoice (copy)/majel_gui.py"
+Icon=multimedia-volume-control
+Terminal=false
+Categories=AudioVideo;Audio;Settings;
+StartupNotify=true

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Claude (Severian)
+Comment=Launch Claude Code with the Severian / Roy Avers narrator voice + instant approval chime
+Exec=gnome-terminal -- "/home/jackgorman/Desktop/Claude_Projects/computerVoice (copy)/start_claude.sh"
+Icon=utilities-terminal
+Terminal=false
+Categories=Development;Utility;
+StartupNotify=true
