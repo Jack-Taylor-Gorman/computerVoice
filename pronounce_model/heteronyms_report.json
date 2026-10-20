@@ -1,0 +1,200 @@
+{
+ "bow": {
+  "cv_acc": 0.624,
+  "n": {
+   "bow_nou-knot": 53,
+   "bow_nou-ship": 56
+  },
+  "wiki_eval_acc": 0.5,
+  "wiki_eval_n": 10
+ },
+ "close": {
+  "cv_acc": 0.952,
+  "n": {
+   "close_adj-nou": 289,
+   "close_vrb": 66
+  },
+  "wiki_eval_acc": 1.0,
+  "wiki_eval_n": 10
+ },
+ "content": {
+  "cv_acc": 0.965,
+  "n": {
+   "content_adj-nou-vrb": 25,
+   "content_nou": 146
+  },
+  "wiki_eval_acc": 0.9,
+  "wiki_eval_n": 10
+ },
+ "desert": {
+  "cv_acc": 0.977,
+  "n": {
+   "desert_nou": 124,
+   "desert_vrb": 9
+  },
+  "wiki_eval_acc": 1.0,
+  "wiki_eval_n": 10
+ },
+ "lead": {
+  "cv_acc": 0.938,
+  "n": {
+   "lead_nou": 28,
+   "lead_nou-vrb": 182
+  },
+  "wiki_eval_acc": 0.9,
+  "wiki_eval_n": 10
+ },
+ "live": {
+  "cv_acc": 0.95,
+  "n": {
+   "live_adj": 111,
+   "live_vrb": 211
+  },
+  "wiki_eval_acc": 0.9,
+  "wiki_eval_n": 10
+ },
+ "lives": {
+  "cv_acc": 0.939,
+  "n": {
+   "lives_nou": 88,
+   "lives_vrb": 93
+  },
+  "wiki_eval_acc": 1.0,
+  "wiki_eval_n": 10
+ },
+ "minute": {
+  "cv_acc": 0.953,
+  "n": {
+   "minute": 136,
+   "minute_adj": 33
+  },
+  "wiki_eval_acc": 1.0,
+  "wiki_eval_n": 10
+ },
+ "object": {
+  "cv_acc": 0.972,
+  "n": {
+   "object_nou": 160,
+   "object_vrb": 21
+  },
+  "wiki_eval_acc": 1.0,
+  "wiki_eval_n": 10
+ },
+ "present": {
+  "cv_acc": 0.975,
+  "n": {
+   "present_adj-nou": 432,
+   "present_vrb": 57
+  },
+  "wiki_eval_acc": 1.0,
+  "wiki_eval_n": 10
+ },
+ "produce": {
+  "cv_acc": 0.928,
+  "n": {
+   "produce_nou": 23,
+   "produce_vrb": 171
+  },
+  "wiki_eval_acc": 0.9,
+  "wiki_eval_n": 10
+ },
+ "read": {
+  "cv_acc": 0.877,
+  "n": {
+   "read_past": 166,
+   "read_present": 191
+  },
+  "wiki_eval_acc": 0.692,
+  "wiki_eval_n": 13
+ },
+ "record": {
+  "cv_acc": 0.969,
+  "n": {
+   "record_nou": 222,
+   "record_vrb": 32
+  },
+  "wiki_eval_acc": 1.0,
+  "wiki_eval_n": 9
+ },
+ "refuse": {
+  "cv_acc": 0.953,
+  "n": {
+   "refuse_nou": 22,
+   "refuse_vrb": 105
+  },
+  "wiki_eval_acc": 0.9,
+  "wiki_eval_n": 10
+ },
+ "resume": {
+  "cv_acc": 0.985,
+  "n": {
+   "resume_nou": 23,
+   "resume_vrb": 108
+  },
+  "wiki_eval_acc": 0.9,
+  "wiki_eval_n": 10
+ },
+ "row": {
+  "cv_acc": 1.0,
+  "n": {
+   "row_1": 109,
+   "row_2": 9
+  },
+  "wiki_eval_acc": 1.0,
+  "wiki_eval_n": 10
+ },
+ "tear": {
+  "cv_acc": 0.878,
+  "n": {
+   "tear_nou": 39,
+   "tear_vrb": 84
+  },
+  "wiki_eval_acc": 0.8,
+  "wiki_eval_n": 10
+ },
+ "use": {
+  "cv_acc": 0.973,
+  "n": {
+   "use_nou": 431,
+   "use_vrb": 282
+  },
+  "wiki_eval_acc": 1.0,
+  "wiki_eval_n": 10
+ },
+ "uses": {
+  "cv_acc": 0.969,
+  "n": {
+   "uses_nou": 40,
+   "uses_vrb": 119
+  },
+  "wiki_eval_acc": 1.0,
+  "wiki_eval_n": 10
+ },
+ "wind": {
+  "cv_acc": 0.978,
+  "n": {
+   "wind_nou": 156,
+   "wind_vrb": 22
+  },
+  "wiki_eval_acc": 1.0,
+  "wiki_eval_n": 10
+ },
+ "winds": {
+  "cv_acc": 0.941,
+  "n": {
+   "winds_nou": 109,
+   "winds_vrb": 9
+  },
+  "wiki_eval_acc": 1.0,
+  "wiki_eval_n": 10
+ },
+ "wound": {
+  "cv_acc": 0.943,
+  "n": {
+   "wound_nou-vrb": 88,
+   "wound_vrb": 52
+  },
+  "wiki_eval_acc": 0.8,
+  "wiki_eval_n": 10
+ }
+}

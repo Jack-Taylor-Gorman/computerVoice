@@ -1,0 +1,132 @@
+# Hand-labelled sentences in the style of Majel's summaries, so the heteronym
+# models see software contexts as well as Wikipedia and Brown. None of these
+# is an eval phrase (eval_cases.json). Format: wordid<TAB>sentence.
+live_adj	The new build is live on the server.
+live_adj	Deployment finished and the page is now live.
+live_adj	We pushed the fix to live.
+live_adj	The changes are live in production.
+live_adj	I tested it against the live database.
+live_adj	The live preview updates as you type.
+live_adj	Going live in five minutes.
+live_adj	The campaign went live yesterday.
+live_adj	It is a live feed from the camera.
+live_adj	Switched the toggle to live mode.
+live_vrb	The helper functions live in utils.
+live_vrb	Those settings live in the config file.
+live_vrb	We live near the station.
+live_vrb	The tests live next to the source.
+live_vrb	You can live without that dependency.
+live_vrb	Where does that function live now?
+read_past	I read through the whole diff.
+read_past	Claude read every file in the folder.
+read_past	I read your notes and fixed the bug.
+read_past	The script read the config and exited.
+read_past	It read zero bytes from the socket.
+read_past	I've read the error log.
+read_past	She read the report last night.
+read_past	The worker read the request and replied.
+read_present	I will read the docs first.
+read_present	Let me read the error message.
+read_present	Read the file before editing it.
+read_present	It can read the socket now.
+read_present	You should read the changelog.
+read_present	The function tries to read the header.
+read_present	I need to read the config.
+read_present	Read me the summary.
+read_present	The volume is mounted read only.
+read_present	Make the cache read only.
+read_present	That field is read only for guests.
+read_present	Can you read the output back?
+close_vrb	Close the terminal when done.
+close_vrb	I will close the pull request.
+close_vrb	Remember to close the file handle.
+close_vrb	The script should close the socket.
+close_adj-nou	The build is close to finished.
+close_adj-nou	That was a close call.
+close_adj-nou	Keep a close eye on memory.
+close_adj-nou	We are very close now.
+use_vrb	I will use the cached version.
+use_vrb	Use a smaller model instead.
+use_vrb	We can use the socket directly.
+use_nou	Memory use is fine.
+use_nou	The disk use dropped after cleanup.
+use_nou	It has one use only.
+use_nou	There is no use retrying it.
+record_nou	Added a new record to the table.
+record_nou	The record shows three failures.
+record_nou	That run set a speed record.
+record_vrb	Record a short demo video.
+record_vrb	We record every request in the log.
+record_vrb	I will record the screen now.
+present_adj-nou	The key is present in the file.
+present_adj-nou	At present the tests pass.
+present_adj-nou	Both values are present.
+present_vrb	We will present it on Friday.
+present_vrb	The app should present a dialog.
+present_vrb	Present the options to the user.
+object_nou	Each object has an id field.
+object_nou	The config object is empty.
+object_nou	Pass an object to the function.
+object_vrb	Nobody will object to that change.
+object_vrb	I object to the new rule.
+object_vrb	They might object to the price.
+content_nou	The file content is unchanged.
+content_nou	Load the content from the cache.
+content_nou	Video content takes longer.
+content_adj-nou-vrb	Jack seems content with the result.
+content_adj-nou-vrb	They were content to wait.
+content_adj-nou-vrb	I am quite content with the output.
+minute	The build took a minute.
+minute	Wait a minute before retrying.
+minute	It finished in under a minute.
+minute_adj	The change is minute.
+minute_adj	A minute amount of drift remains.
+minute_adj	The two recordings differ in minute ways.
+desert_nou	They drove across the desert.
+desert_nou	A desert island.
+desert_vrb	Do not desert the project now.
+desert_vrb	Soldiers who desert are punished.
+produce_nou	The shop sells local produce.
+produce_nou	Organic produce costs more.
+produce_vrb	The build will produce a binary.
+produce_vrb	It should produce the same output.
+refuse_nou	The refuse truck came early.
+refuse_nou	Collect the refuse on Monday.
+refuse_vrb	The server may refuse the connection.
+refuse_vrb	Git will refuse to push.
+resume_nou	Attach your resume to the application.
+resume_nou	I updated the resume and cover letter.
+resume_nou	Send the resume as a PDF.
+resume_vrb	The loop will resume after the pause.
+resume_vrb	You can resume the session later.
+resume_vrb	Resume playback from the start.
+row_1	Each row is one user.
+row_1	Insert a row into the table.
+row_1	The second row is empty.
+row_2	There was a big row over the budget.
+row_2	A row broke out between the two teams.
+row_2	A political row broke out.
+wind_nou	The wind picked up.
+wind_nou	A cold wind blew.
+wind_vrb	Wind the cable around the spool.
+wind_vrb	Things should wind down by midnight.
+wind_vrb	Let us wind up the meeting.
+wound_vrb	He wound the clock every night.
+wound_vrb	The road wound through the hills.
+wound_vrb	We wound down the servers.
+wound_nou-vrb	The wound needs stitches.
+wound_nou-vrb	A deep wound in his arm.
+tear_nou	A tear rolled down her cheek.
+tear_nou	She wiped away a tear.
+tear_vrb	Tear down the old container.
+tear_vrb	We tear out the legacy code.
+tear_vrb	Wear and tear on the cable.
+lead_nou	Old paint can contain lead.
+lead_nou	The lead in the solder.
+lead_nou-vrb	Jack will lead the meeting.
+lead_nou-vrb	She took the lead on the project.
+lead_nou-vrb	That could lead to a crash.
+bow_nou-knot	A bow and arrow.
+bow_nou-knot	She wore a bow in her hair.
+bow_nou-ship	The actors took a bow.
+bow_nou-ship	The bow of the ship.
