@@ -59,7 +59,7 @@ character, so a long unknown token loses to two common words.
 
 Other jobs (a Gradle daemon, ffmpeg, LibreOffice conversions) took
 MemAvailable from 3.6 GB down to 0.6 GB within minutes. Every training and
-recogniser run goes through `/tmp/pronounce_waitmem.sh`, which waits for
+recogniser run goes through `pronounce_model/waitmem.sh`, which waits for
 3 GB. Even `huggingface_hub.snapshot_download` used 500 MB of RSS.
 
 ## 2026-10-20 — Load only the recogniser's feature extractor and vocab.json
