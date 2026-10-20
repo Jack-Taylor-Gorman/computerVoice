@@ -75,3 +75,6 @@ dataset_avers/
 dataset_avers_book3/
 *.pid
 .session.lock
+
+# grow loop logs
+.loop/

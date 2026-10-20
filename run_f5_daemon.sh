@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 # Watchdog wrapper for f5_daemon.py.
 #
+# f5_daemon.py is now a small stdlib front that owns the socket; it starts
+# the heavy model process (f5_worker.py) on demand and stops it when idle,
+# and the worker exits by itself whenever the front goes away. So this
+# watchdog only ever has to keep the front alive.
+#
 # Two failure modes are covered:
 #   1. Daemon process crashes (CUDA OOM, exception) - bash sees non-zero
 #      exit and we respawn after a 5s cooldown.
@@ -16,7 +21,7 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG=/tmp/majel_f5_daemon.log
 SOCK=/tmp/majel_f5.sock
 LOCK=/tmp/majel_f5_daemon.lock
-STARTUP_GRACE=60      # seconds we allow the model to load before socket-monitoring kicks in
+STARTUP_GRACE=60      # seconds we allow the front to bind the socket before socket-monitoring kicks in
 POLL_INTERVAL=5       # seconds between socket-existence checks
 
 rm -f "$SOCK" "$LOCK"

@@ -1,74 +1,176 @@
 #!/usr/bin/env python3
-"""Long-lived F5-TTS inference daemon for the Majel finetune.
+"""Always-on front for the Majel F5-TTS voice server (stdlib only, a few MB).
 
-Loads the F5TTS_v1_Base + Majel finetune checkpoint + vocoder once,
-then serves newline-delimited JSON requests over a Unix socket so
-speak.py doesn't pay the ~10–15s model-load cost per utterance.
+Owns /tmp/majel_f5.sock so speak.py and buddy always find a socket, starts
+the heavy model process (f5_worker.py) on the first request, forwards
+requests to it, and stops it after MAJEL_F5_IDLE_S seconds of silence so
+its ~2-3 GB of RAM and ~0.9 GB of VRAM go back to the machine. A cold start
+costs a few seconds on the first utterance after idle; warm requests pay
+nothing extra.
 
-Protocol:
+Protocol (unchanged from the single-process daemon):
   request  : {"text": "Working.", "dst": "/tmp/foo.wav"}\\n
   response : {"ok": true}\\n        or  {"ok": false, "err": "..."}\\n
+Extra request, for callers that know speech is coming soon:
+  request  : {"warm": true}\\n   ->  {"ok": true}\\n once the model is loaded
 
 Env:
-  MAJEL_F5_RUN     finetune run name (default: majel_all_run2)
-  MAJEL_F5_CKPT    checkpoint stem inside that run (default: model_600)
-  MAJEL_F5_REF     filename inside dataset/clips_curated/ to use as ref clip
-  MAJEL_F5_REFTEXT transcript of that ref clip
-  MAJEL_CPU=1      force CPU
+  MAJEL_F5_IDLE_S   seconds of silence before the worker is stopped (default
+                    600; 0 keeps it loaded forever)
+  MAJEL_F5_PREWARM  1 = load the model at start-up instead of on first use
+  Everything else (MAJEL_F5_RUN, MAJEL_F5_CKPT, MAJEL_F5_REF, ...) is passed
+  through to f5_worker.py.
 """
 from __future__ import annotations
 
+import fcntl
 import json
-
-import pronounce
 import os
+import select
+import signal
 import socket
+import subprocess
 import sys
 import threading
+import time
 from pathlib import Path
-
-import torch as _torch
-_orig_torch_load = _torch.load
-def _patched_load(*a, **kw):
-    kw.setdefault("weights_only", False)
-    return _orig_torch_load(*a, **kw)
-_torch.load = _patched_load
-
-from f5_tts.api import F5TTS
 
 ROOT = Path(__file__).resolve().parent
 SOCK_PATH = "/tmp/majel_f5.sock"
 LOCK_PATH = "/tmp/majel_f5_daemon.lock"
+WORKER = ROOT / "f5_worker.py"
 
-RUN = os.environ.get("MAJEL_F5_RUN", "majel_all_run2")
-CKPT_NAME = os.environ.get("MAJEL_F5_CKPT", "model_600")
-CKPT_PATH = ROOT / "venv" / "lib" / "python3.10" / "ckpts" / RUN / f"{CKPT_NAME}.pt"
-VOCAB_PATH = ROOT / "venv" / "lib" / "python3.10" / "data" / f"{RUN}_pinyin" / "vocab.txt"
-REF_NAME = os.environ.get(
-    "MAJEL_F5_REF",
-    "001__0.985__2.1s__Accessing_Library_Computer_Data.wav",
-)
-REF_AUDIO = ROOT / "dataset" / "clips_curated" / REF_NAME
-REF_TEXT = os.environ.get("MAJEL_F5_REFTEXT", "Accessing Library Computer Data")
-
-# Global speed multiplier passed to F5TTS.infer(). 0.9 = 10% slower, which
-# adds a touch of LCARS "deliberate" cadence without dragging the audio.
-SPEED = float(os.environ.get("MAJEL_F5_SPEED", "0.7"))
-
-# Inference is heavyweight + holds the GPU; serialize.
-_lock = threading.Lock()
+IDLE_S = float(os.environ.get("MAJEL_F5_IDLE_S", "600"))
+PREWARM = os.environ.get("MAJEL_F5_PREWARM") == "1"
+LOAD_TIMEOUT_S = 180.0
+REQUEST_TIMEOUT_S = 150.0
 
 
-def build_f5() -> F5TTS:
-    return F5TTS(
-        model="F5TTS_v1_Base",
-        ckpt_file=str(CKPT_PATH),
-        vocab_file=str(VOCAB_PATH),
-        device="cuda" if os.environ.get("MAJEL_CPU") != "1" else "cpu",
-    )
+def log(msg: str) -> None:
+    sys.stderr.write(f"{time.strftime('%H:%M:%S')} majel_f5_front: {msg}\n")
+    sys.stderr.flush()
 
 
-def handle(conn: socket.socket, f5: F5TTS) -> None:
+class Worker:
+    """The model process, started lazily and stopped when idle."""
+
+    def __init__(self) -> None:
+        self.lock = threading.Lock()  # serialises start/requests/stop
+        self.proc: subprocess.Popen | None = None
+        self.buf = b""
+        self.last_used = time.monotonic()
+
+    def _readline(self, timeout: float) -> bytes | None:
+        """One line from the worker's stdout, or None on EOF/timeout."""
+        assert self.proc is not None
+        fd = self.proc.stdout.fileno()
+        deadline = time.monotonic() + timeout
+        while b"\n" not in self.buf:
+            left = deadline - time.monotonic()
+            if left <= 0:
+                return None
+            r, _, _ = select.select([fd], [], [], left)
+            if not r:
+                continue
+            chunk = os.read(fd, 65536)
+            if not chunk:
+                return None
+            self.buf += chunk
+        line, self.buf = self.buf.split(b"\n", 1)
+        return line
+
+    def _alive(self) -> bool:
+        return self.proc is not None and self.proc.poll() is None
+
+    def _start(self) -> str | None:
+        """Launch the worker and wait for it to load; returns an error or None."""
+        t = time.monotonic()
+        env = dict(os.environ)
+        env.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+        self.buf = b""
+        # stderr is inherited, so the worker's output lands in the same log.
+        self.proc = subprocess.Popen(
+            [sys.executable, str(WORKER)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+            bufsize=0, cwd=str(ROOT), env=env,
+        )
+        log(f"worker pid={self.proc.pid} starting")
+        line = self._readline(LOAD_TIMEOUT_S)
+        try:
+            msg = json.loads(line) if line else {}
+        except ValueError:
+            msg = {}
+        if not msg.get("ready"):
+            err = msg.get("err") or "worker failed to load (see /tmp/majel_f5_daemon.log)"
+            log(f"worker start failed: {err}")
+            self._kill()
+            return err
+        log(f"worker ready in {time.monotonic() - t:.2f}s")
+        return None
+
+    def _kill(self) -> None:
+        p, self.proc = self.proc, None
+        if p is None:
+            return
+        try:
+            p.stdin.close()  # a clean EOF lets the worker exit by itself
+        except OSError:
+            pass
+        try:
+            p.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            p.kill()
+            p.wait()
+        log(f"worker pid={p.pid} stopped rc={p.returncode}")
+
+    def request(self, line: bytes) -> bytes:
+        with self.lock:
+            if not self._alive():
+                if self.proc is not None:
+                    self._kill()
+                err = self._start()
+                if err:
+                    return json.dumps({"ok": False, "err": err}).encode()
+            self.last_used = time.monotonic()
+            try:
+                self.proc.stdin.write(line.rstrip(b"\n") + b"\n")
+                reply = self._readline(REQUEST_TIMEOUT_S)
+            except OSError:
+                reply = None
+            self.last_used = time.monotonic()
+            if reply is None:
+                log("worker died or hung mid-request; restarting on next request")
+                self._kill()
+                return b'{"ok": false, "err": "voice worker died mid-request"}'
+            return reply
+
+    def warm(self) -> bytes:
+        with self.lock:
+            self.last_used = time.monotonic()
+            if self._alive():
+                return b'{"ok": true}'
+            if self.proc is not None:
+                self._kill()
+            err = self._start()
+            self.last_used = time.monotonic()
+            return json.dumps({"ok": False, "err": err} if err else {"ok": True}).encode()
+
+    def reap_if_idle(self) -> None:
+        if IDLE_S <= 0 or not self.lock.acquire(blocking=False):
+            return  # busy means not idle
+        try:
+            if self.proc is not None and not self._alive():
+                log(f"worker pid={self.proc.pid} exited unexpectedly rc={self.proc.returncode}")
+                self._kill()
+            elif self._alive() and time.monotonic() - self.last_used > IDLE_S:
+                log(f"idle for {IDLE_S:.0f}s, unloading model")
+                self._kill()
+        finally:
+            self.lock.release()
+
+
+
+def handle(conn: socket.socket, worker: Worker) -> None:
     try:
         data = b""
         while not data.endswith(b"\n"):
@@ -76,54 +178,20 @@ def handle(conn: socket.socket, f5: F5TTS) -> None:
             if not chunk:
                 break
             data += chunk
-        if not data:
+        if not data.strip():
             return
-        req = json.loads(data.decode())
-        text = (req.get("text") or "").strip()
-        dst = req["dst"]
-        if not text:
-            conn.sendall(b'{"ok": false, "err": "empty text"}\n')
-            return
-        # Force a terminal period so the model has a clear stop token.
-        # Do NOT pad with extra "." pause tokens — F5 fills the
-        # over-allocated frames with hallucinated sound rather than
-        # silence, producing a gibberish tail. Tail-completeness is
-        # instead enforced by the post-generation ffmpeg apad below
-        # which appends real PCM silence to the output WAV.
-        # Every caller gets the same pronunciation fixes (buddy's readouts
-        # don't pass through computerize.py); applying them twice is harmless.
-        gen_text = pronounce.apply(text)
-        if not gen_text.endswith((".", "!", "?")):
-            gen_text += "."
-        with _lock:
-            f5.infer(
-                ref_file=str(REF_AUDIO),
-                ref_text=REF_TEXT,
-                gen_text=gen_text,
-                file_wave=dst,
-                show_info=lambda *a, **k: None,
-                remove_silence=False,
-                speed=SPEED,
-            )
-        # Belt-and-suspenders: append 500ms of silence to the output WAV
-        # so even if F5 itself produced a slightly-clipped tail, the
-        # final played audio definitely carries the last syllable
-        # through to natural end-of-sentence silence. ffmpeg apad is
-        # cheap (no re-encoding of the body, just a tail extension).
         try:
-            import subprocess as _sp, tempfile as _tf, shutil as _sh, os as _os
-            tmp_pad = dst + ".pad.wav"
-            _sp.run(
-                ["ffmpeg", "-y", "-loglevel", "error", "-i", dst,
-                 "-af", "apad=pad_dur=0.5",
-                 "-c:a", "pcm_s16le", tmp_pad],
-                check=True,
-            )
-            _sh.move(tmp_pad, dst)
-        except Exception:
-            # Padding failure isn't fatal — original WAV stays in place.
-            pass
-        conn.sendall(b'{"ok": true}\n')
+            req = json.loads(data.decode())
+        except ValueError as e:
+            conn.sendall(json.dumps({"ok": False, "err": f"bad request: {e}"}).encode() + b"\n")
+            return
+        if req.get("warm"):
+            reply = worker.warm()
+        elif not (req.get("text") or "").strip():
+            reply = b'{"ok": false, "err": "empty text"}'
+        else:
+            reply = worker.request(data)
+        conn.sendall(reply + b"\n")
     except Exception as e:
         try:
             conn.sendall(json.dumps({"ok": False, "err": str(e)}).encode() + b"\n")
@@ -137,7 +205,6 @@ def handle(conn: socket.socket, f5: F5TTS) -> None:
 
 
 def main() -> int:
-    import fcntl
     lf = open(LOCK_PATH, "w")
     try:
         fcntl.flock(lf, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -145,45 +212,53 @@ def main() -> int:
         sys.stderr.write("majel_f5_daemon already running\n")
         return 0
 
+    if not WORKER.exists():
+        sys.stderr.write(f"missing worker: {WORKER}\n")
+        return 2
+
     try:
         os.unlink(SOCK_PATH)
     except FileNotFoundError:
         pass
 
-    if not CKPT_PATH.exists():
-        sys.stderr.write(f"missing checkpoint: {CKPT_PATH}\n")
-        return 2
-    if not VOCAB_PATH.exists():
-        sys.stderr.write(f"missing vocab: {VOCAB_PATH}\n")
-        return 2
-    if not REF_AUDIO.exists():
-        sys.stderr.write(f"missing ref audio: {REF_AUDIO}\n")
-        return 2
+    worker = Worker()
 
-    sys.stderr.write(f"majel_f5_daemon: loading {RUN}/{CKPT_NAME}...\n")
-    sys.stderr.flush()
-    f5 = build_f5()
-    sys.stderr.write("majel_f5_daemon: ready\n")
-    sys.stderr.flush()
+    def _shutdown(signum, _frame):
+        log(f"signal {signum}, stopping")
+        # Kill directly rather than via the request lock: the watchdog
+        # follows its SIGTERM with SIGKILL one second later.
+        p = worker.proc
+        if p is not None and p.poll() is None:
+            p.kill()
+        try:
+            os.unlink(SOCK_PATH)
+        except FileNotFoundError:
+            pass
+        os._exit(0)
+
+    signal.signal(signal.SIGTERM, _shutdown)
+    signal.signal(signal.SIGINT, _shutdown)
 
     srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     srv.bind(SOCK_PATH)
     os.chmod(SOCK_PATH, 0o600)
-    srv.listen(4)
+    srv.listen(8)
+    log(f"listening on {SOCK_PATH} (idle unload after {IDLE_S:.0f}s, prewarm={PREWARM})")
+    sys.stderr.write("majel_f5_daemon: ready\n")
+    sys.stderr.flush()
+
+    def _reaper():
+        while True:
+            time.sleep(5)
+            worker.reap_if_idle()
+
+    threading.Thread(target=_reaper, daemon=True).start()
+    if PREWARM:
+        threading.Thread(target=worker.warm, daemon=True).start()
 
     while True:
-        try:
-            conn, _ = srv.accept()
-        except KeyboardInterrupt:
-            break
-        t = threading.Thread(target=handle, args=(conn, f5), daemon=True)
-        t.start()
-
-    try:
-        os.unlink(SOCK_PATH)
-    except FileNotFoundError:
-        pass
-    return 0
+        conn, _ = srv.accept()
+        threading.Thread(target=handle, args=(conn, worker), daemon=True).start()
 
 
 if __name__ == "__main__":
