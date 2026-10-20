@@ -1,0 +1,612 @@
+[
+ {
+  "id": "h2-live-a1",
+  "type": "heteronym",
+  "text": "Version two is live for every user.",
+  "target": "live",
+  "expect": "L AY V",
+  "wrong": [
+   "L IH V"
+  ]
+ },
+ {
+  "id": "h2-live-a2",
+  "type": "heteronym",
+  "text": "The live dashboard shows each request.",
+  "target": "live",
+  "expect": "L AY V",
+  "wrong": [
+   "L IH V"
+  ]
+ },
+ {
+  "id": "h2-live-v1",
+  "type": "heteronym",
+  "text": "The test files live under the scripts folder.",
+  "target": "live",
+  "expect": "L IH V",
+  "wrong": [
+   "L AY V"
+  ]
+ },
+ {
+  "id": "h2-live-v2",
+  "type": "heteronym",
+  "text": "Most of the users live in Asia.",
+  "target": "live",
+  "expect": "L IH V",
+  "wrong": [
+   "L AY V"
+  ]
+ },
+ {
+  "id": "h2-read-past1",
+  "type": "heteronym",
+  "text": "Claude read the error log and found the cause.",
+  "target": "read",
+  "expect": "R EH D",
+  "wrong": [
+   "R IY D"
+  ]
+ },
+ {
+  "id": "h2-read-past2",
+  "type": "heteronym",
+  "text": "I have read every file in the folder.",
+  "target": "read",
+  "expect": "R EH D",
+  "wrong": [
+   "R IY D"
+  ]
+ },
+ {
+  "id": "h2-read-pres1",
+  "type": "heteronym",
+  "text": "Majel will read the summary aloud.",
+  "target": "read",
+  "expect": "R IY D",
+  "wrong": [
+   "R EH D"
+  ]
+ },
+ {
+  "id": "h2-read-pres2",
+  "type": "heteronym",
+  "text": "Read the notes before the meeting.",
+  "target": "read",
+  "expect": "R IY D",
+  "wrong": [
+   "R EH D"
+  ]
+ },
+ {
+  "id": "h2-lead-metal1",
+  "type": "heteronym",
+  "text": "The old house had lead paint.",
+  "target": "lead",
+  "expect": "L EH D",
+  "wrong": [
+   "L IY D"
+  ]
+ },
+ {
+  "id": "h2-lead-metal2",
+  "type": "heteronym",
+  "text": "Lead is a heavy metal.",
+  "target": "lead",
+  "expect": "L EH D",
+  "wrong": [
+   "L IY D"
+  ]
+ },
+ {
+  "id": "h2-lead-v1",
+  "type": "heteronym",
+  "text": "She will lead the review.",
+  "target": "lead",
+  "expect": "L IY D",
+  "wrong": [
+   "L EH D"
+  ]
+ },
+ {
+  "id": "h2-lead-v2",
+  "type": "heteronym",
+  "text": "These steps lead to a clean build.",
+  "target": "lead",
+  "expect": "L IY D",
+  "wrong": [
+   "L EH D"
+  ]
+ },
+ {
+  "id": "h2-close-adj1",
+  "type": "heteronym",
+  "text": "The two numbers are very close.",
+  "target": "close",
+  "expect": "K L OW S",
+  "wrong": [
+   "K L OW Z"
+  ]
+ },
+ {
+  "id": "h2-close-adj2",
+  "type": "heteronym",
+  "text": "Keep the charger close by.",
+  "target": "close",
+  "expect": "K L OW S",
+  "wrong": [
+   "K L OW Z"
+  ]
+ },
+ {
+  "id": "h2-close-v1",
+  "type": "heteronym",
+  "text": "Close the terminal when it finishes.",
+  "target": "close",
+  "expect": "K L OW Z",
+  "wrong": [
+   "K L OW S"
+  ]
+ },
+ {
+  "id": "h2-close-v2",
+  "type": "heteronym",
+  "text": "Please close the settings window.",
+  "target": "close",
+  "expect": "K L OW Z",
+  "wrong": [
+   "K L OW S"
+  ]
+ },
+ {
+  "id": "h2-use-n1",
+  "type": "heteronym",
+  "text": "There is no use waiting for it.",
+  "target": "use",
+  "expect": "Y UW S",
+  "wrong": [
+   "Y UW Z"
+  ]
+ },
+ {
+  "id": "h2-use-n2",
+  "type": "heteronym",
+  "text": "The use of caching cut the time in half.",
+  "target": "use",
+  "expect": "Y UW S",
+  "wrong": [
+   "Y UW Z"
+  ]
+ },
+ {
+  "id": "h2-use-v1",
+  "type": "heteronym",
+  "text": "We use the local model for routing.",
+  "target": "use",
+  "expect": "Y UW Z",
+  "wrong": [
+   "Y UW S"
+  ]
+ },
+ {
+  "id": "h2-use-v2",
+  "type": "heteronym",
+  "text": "Use the second socket instead.",
+  "target": "use",
+  "expect": "Y UW Z",
+  "wrong": [
+   "Y UW S"
+  ]
+ },
+ {
+  "id": "h2-record-n1",
+  "type": "heteronym",
+  "text": "Keep a record of each run.",
+  "target": "record",
+  "expect": "R EH K ER D",
+  "wrong": [
+   "R IH K AO R D"
+  ]
+ },
+ {
+  "id": "h2-record-n2",
+  "type": "heteronym",
+  "text": "That was a record time for the build.",
+  "target": "record",
+  "expect": "R EH K ER D",
+  "wrong": [
+   "R IH K AO R D"
+  ]
+ },
+ {
+  "id": "h2-record-v1",
+  "type": "heteronym",
+  "text": "Record the screen during the demo.",
+  "target": "record",
+  "expect": "R IH K AO R D",
+  "wrong": [
+   "R EH K ER D"
+  ]
+ },
+ {
+  "id": "h2-record-v2",
+  "type": "heteronym",
+  "text": "The script will record every keystroke.",
+  "target": "record",
+  "expect": "R IH K AO R D",
+  "wrong": [
+   "R EH K ER D"
+  ]
+ },
+ {
+  "id": "h2-present-n1",
+  "type": "heteronym",
+  "text": "Everyone was present at the meeting.",
+  "target": "present",
+  "expect": "P R EH Z AH N T",
+  "wrong": [
+   "P R IY Z EH N T"
+  ]
+ },
+ {
+  "id": "h2-present-n2",
+  "type": "heteronym",
+  "text": "A birthday present arrived.",
+  "target": "present",
+  "expect": "P R EH Z AH N T",
+  "wrong": [
+   "P R IY Z EH N T"
+  ]
+ },
+ {
+  "id": "h2-present-v1",
+  "type": "heteronym",
+  "text": "I will present the results tomorrow.",
+  "target": "present",
+  "expect": "P R IY Z EH N T",
+  "wrong": [
+   "P R EH Z AH N T"
+  ]
+ },
+ {
+  "id": "h2-present-v2",
+  "type": "heteronym",
+  "text": "The tool can present a summary.",
+  "target": "present",
+  "expect": "P R IY Z EH N T",
+  "wrong": [
+   "P R EH Z AH N T"
+  ]
+ },
+ {
+  "id": "h2-object-n1",
+  "type": "heteronym",
+  "text": "The function returns an object.",
+  "target": "object",
+  "expect": "AA B JH EH K T",
+  "wrong": [
+   "AH0 B JH EH1 K T"
+  ]
+ },
+ {
+  "id": "h2-object-n2",
+  "type": "heteronym",
+  "text": "Each object has an identifier.",
+  "target": "object",
+  "expect": "AA B JH EH K T",
+  "wrong": [
+   "AH0 B JH EH1 K T"
+  ]
+ },
+ {
+  "id": "h2-object-v1",
+  "type": "heteronym",
+  "text": "Nobody will object to the change.",
+  "target": "object",
+  "expect": "AH0 B JH EH1 K T",
+  "wrong": [
+   "AA B JH EH K T"
+  ]
+ },
+ {
+  "id": "h2-object-v2",
+  "type": "heteronym",
+  "text": "I object strongly.",
+  "target": "object",
+  "expect": "AH0 B JH EH1 K T",
+  "wrong": [
+   "AA B JH EH K T"
+  ]
+ },
+ {
+  "id": "h2-content-n1",
+  "type": "heteronym",
+  "text": "The page content loaded quickly.",
+  "target": "content",
+  "expect": "K AA N T EH N T",
+  "wrong": [
+   "K AH N T EH N T"
+  ]
+ },
+ {
+  "id": "h2-content-n2",
+  "type": "heteronym",
+  "text": "Check the file content first.",
+  "target": "content",
+  "expect": "K AA N T EH N T",
+  "wrong": [
+   "K AH N T EH N T"
+  ]
+ },
+ {
+  "id": "h2-content-a1",
+  "type": "heteronym",
+  "text": "Jack seemed content with the result.",
+  "target": "content",
+  "expect": "K AH N T EH N T",
+  "wrong": [
+   "K AA N T EH N T"
+  ]
+ },
+ {
+  "id": "h2-content-a2",
+  "type": "heteronym",
+  "text": "I am content to wait.",
+  "target": "content",
+  "expect": "K AH N T EH N T",
+  "wrong": [
+   "K AA N T EH N T"
+  ]
+ },
+ {
+  "id": "h2-minute-n1",
+  "type": "heteronym",
+  "text": "It took one minute to compile.",
+  "target": "minute",
+  "expect": "M IH N AH T",
+  "wrong": [
+   "M AY N UW T"
+  ]
+ },
+ {
+  "id": "h2-minute-n2",
+  "type": "heteronym",
+  "text": "Wait a minute.",
+  "target": "minute",
+  "expect": "M IH N AH T",
+  "wrong": [
+   "M AY N UW T"
+  ]
+ },
+ {
+  "id": "h2-minute-a1",
+  "type": "heteronym",
+  "text": "The differences are minute.",
+  "target": "minute",
+  "expect": "M AY N UW T",
+  "wrong": [
+   "M IH N AH T"
+  ]
+ },
+ {
+  "id": "h2-minute-a2",
+  "type": "heteronym",
+  "text": "A minute amount of memory leaked.",
+  "target": "minute",
+  "expect": "M AY N UW T",
+  "wrong": [
+   "M IH N AH T"
+  ]
+ },
+ {
+  "id": "h2-resume-n1",
+  "type": "heteronym",
+  "text": "Update your resume before applying.",
+  "target": "resume",
+  "expect": "R EH Z AH M EY",
+  "wrong": [
+   "R IH Z UW M"
+  ]
+ },
+ {
+  "id": "h2-resume-n2",
+  "type": "heteronym",
+  "text": "The resume is two pages long.",
+  "target": "resume",
+  "expect": "R EH Z AH M EY",
+  "wrong": [
+   "R IH Z UW M"
+  ]
+ },
+ {
+  "id": "h2-resume-v1",
+  "type": "heteronym",
+  "text": "Playback will resume after the advert.",
+  "target": "resume",
+  "expect": "R IH Z UW M",
+  "wrong": [
+   "R EH Z AH M EY"
+  ]
+ },
+ {
+  "id": "h2-resume-v2",
+  "type": "heteronym",
+  "text": "Resume the upload once the network is back.",
+  "target": "resume",
+  "expect": "R IH Z UW M",
+  "wrong": [
+   "R EH Z AH M EY"
+  ]
+ },
+ {
+  "id": "h2-wind-n1",
+  "type": "heteronym",
+  "text": "The wind was strong today.",
+  "target": "wind",
+  "expect": "W IH N D",
+  "wrong": [
+   "W AY N D"
+  ]
+ },
+ {
+  "id": "h2-wind-v1",
+  "type": "heteronym",
+  "text": "Wind the string around your finger.",
+  "target": "wind",
+  "expect": "W AY N D",
+  "wrong": [
+   "W IH N D"
+  ]
+ },
+ {
+  "id": "h2-wind-v2",
+  "type": "heteronym",
+  "text": "We should wind down the old server.",
+  "target": "wind",
+  "expect": "W AY N D",
+  "wrong": [
+   "W IH N D"
+  ]
+ },
+ {
+  "id": "h2-tear-v1",
+  "type": "heteronym",
+  "text": "Tear the label off the box.",
+  "target": "tear",
+  "expect": "T EH R",
+  "wrong": [
+   "T IH R"
+  ]
+ },
+ {
+  "id": "h2-tear-n1",
+  "type": "heteronym",
+  "text": "There was a tear in his eye.",
+  "target": "tear",
+  "expect": "T IH R",
+  "wrong": [
+   "T EH R"
+  ]
+ },
+ {
+  "id": "h2-desert-n1",
+  "type": "heteronym",
+  "text": "The desert is very dry.",
+  "target": "desert",
+  "expect": "D EH Z ER T",
+  "wrong": [
+   "D IH Z ER T"
+  ]
+ },
+ {
+  "id": "h2-desert-v1",
+  "type": "heteronym",
+  "text": "Soldiers may desert their posts.",
+  "target": "desert",
+  "expect": "D IH Z ER T",
+  "wrong": [
+   "D EH Z ER T"
+  ]
+ },
+ {
+  "id": "h2-row-q1",
+  "type": "heteronym",
+  "text": "There was a loud row in the office.",
+  "target": "row",
+  "expect": "R AW",
+  "wrong": [
+   "R OW"
+  ]
+ },
+ {
+  "id": "h2-row-l1",
+  "type": "heteronym",
+  "text": "Delete the last row of the table.",
+  "target": "row",
+  "expect": "R OW",
+  "wrong": [
+   "R AW"
+  ]
+ },
+ {
+  "id": "h2-refuse-n1",
+  "type": "heteronym",
+  "text": "The refuse was collected on Monday.",
+  "target": "refuse",
+  "expect": "R EH F Y UW S",
+  "wrong": [
+   "R IH F Y UW Z"
+  ]
+ },
+ {
+  "id": "h2-refuse-v1",
+  "type": "heteronym",
+  "text": "The server will refuse the connection.",
+  "target": "refuse",
+  "expect": "R IH F Y UW Z",
+  "wrong": [
+   "R EH F Y UW S"
+  ]
+ },
+ {
+  "id": "h2-produce-n1",
+  "type": "heteronym",
+  "text": "Fresh produce is sold here.",
+  "target": "produce",
+  "expect": "P R OW D UW S",
+  "wrong": [
+   "P R AH D UW S"
+  ]
+ },
+ {
+  "id": "h2-produce-v1",
+  "type": "heteronym",
+  "text": "The script will produce a report.",
+  "target": "produce",
+  "expect": "P R AH D UW S",
+  "wrong": [
+   "P R OW D UW S"
+  ]
+ },
+ {
+  "id": "h2-wound-n1",
+  "type": "heteronym",
+  "text": "The wound healed slowly.",
+  "target": "wound",
+  "expect": "W UW N D",
+  "wrong": [
+   "W AW N D"
+  ]
+ },
+ {
+  "id": "h2-wound-v1",
+  "type": "heteronym",
+  "text": "He wound the clock.",
+  "target": "wound",
+  "expect": "W AW N D",
+  "wrong": [
+   "W UW N D"
+  ]
+ },
+ {
+  "id": "h2-bow-b1",
+  "type": "heteronym",
+  "text": "The cast came out to bow at the end.",
+  "target": "bow",
+  "expect": "B AW",
+  "wrong": [
+   "B OW"
+  ]
+ },
+ {
+  "id": "h2-bow-k1",
+  "type": "heteronym",
+  "text": "Tie a bow on the parcel.",
+  "target": "bow",
+  "expect": "B OW",
+  "wrong": [
+   "B AW"
+  ]
+ }
+]

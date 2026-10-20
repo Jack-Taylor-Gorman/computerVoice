@@ -1,0 +1,89 @@
+# Expected pronunciations (ARPAbet) for words CMUdict lacks or gets wrong for
+# this use. Only words whose pronunciation is certain are listed; personal
+# names nobody has confirmed (Jev, Chynna, Huzzle, ...) are left out.
+# word	phones
+supabase	S UW1 P AH0 B EY2 S
+vercel	V ER1 S AH0 L
+indiegogo	IH2 N D IY0 G OW1 G OW0
+ffmpeg	EH1 F EH1 F EH1 M P EH2 G
+stremio	S T R EH1 M IY0 OW0
+higgsfield	HH IH1 G Z F IY2 L D
+flatpak	F L AE1 T P AE2 K
+postgres	P OW1 S T G R EH2 S
+chatgpt	CH AE1 T JH IY1 P IY1 T IY1
+tiktok	T IH1 K T AA2 K
+gmail	JH IY1 M EY2 L
+vimeo	V IH1 M IY0 OW2
+taipei	T AY1 P EY1
+emoji	IH0 M OW1 JH IY0
+schema	S K IY1 M AH0
+nvidia	EH0 N V IH1 D IY0 AH0
+vram	V IY1 R AE2 M
+ctrl	K AH0 N T R OW1 L
+config	K AA1 N F IH0 G
+debug	D IY0 B AH1 G
+inline	IH1 N L AY2 N
+runtime	R AH1 N T AY2 M
+frontend	F R AH1 N T EH2 N D
+backend	B AE1 K EH2 N D
+dropdown	D R AA1 P D AW2 N
+workflow	W ER1 K F L OW2
+workspace	W ER1 K S P EY2 S
+metadata	M EH1 T AH0 D EY2 T AH0
+keyframe	K IY1 F R EY2 M
+untick	AH0 N T IH1 K
+unsent	AH0 N S EH1 N T
+typesafe	T AY1 P S EY2 F
+errored	EH1 R ER0 D
+diffs	D IH1 F S
+logins	L AA1 G IH2 N Z
+onboarding	AA1 N B AO2 R D IH0 NG
+handoff	HH AE1 N D AO2 F
+synthesise	S IH1 N TH AH0 S AY2 Z
+stylised	S T AY1 L AY2 Z D
+chromium	K R OW1 M IY0 AH0 M
+timestamps	T AY1 M S T AE2 M P S
+dongle	D AA1 NG G AH0 L
+outro	AW1 T R OW0
+caveat	K AE1 V IY0 AA2 T
+linux	L IH1 N AH0 K S
+wordninja	W ER1 D N IH2 N JH AH0
+pytorch	P AY1 T AO2 R CH
+huggingface	HH AH1 G IH0 NG F EY2 S
+whisper	W IH1 S P ER0
+kubernetes	K UW2 B ER0 N EH1 T IY0 Z
+nginx	EH1 N JH AH0 N EH1 K S
+openai	OW1 P AH0 N EY1 AY1
+openapi	OW1 P AH0 N EY1 P IY1 AY1
+fps	EH1 F P IY1 EH1 S
+adb	EY1 D IY1 B IY1
+pdfs	P IY1 D IY1 EH1 F S
+# Skipped: pronunciation unconfirmed, or not a word Majel should say.
+jev	-
+chynna	-
+ning	-
+mouz	-
+huzzle	-
+adyen	-
+ebury	-
+adecco	-
+infostellar	-
+breezeway	-
+goswim	-
+gifs	-
+ipads	-
+# Corrections to g2p_en, whose guesses for these ordinary words were wrong.
+git	G IH1 T
+thu	TH ER1 Z D EY2
+scratchpad	S K R AE1 CH P AE2 D
+relaunching	R IY0 L AO1 N CH IH0 NG
+relaunches	R IY0 L AO1 N CH IH0 Z
+renderer	R EH1 N D ER0 ER0
+plugin	P L AH1 G IH0 N
+retargeting	R IY0 T AA1 R G IH0 T IH0 NG
+retries	R IY0 T R AY1 Z
+queued	K Y UW1 D
+tidying	T AY1 D IY0 IH0 NG
+subfolders	S AH1 B F OW2 L D ER0 Z
+audiobook	AO1 D IY0 OW0 B UH2 K
+synthesises	S IH1 N TH AH0 S AY2 Z IH0 Z

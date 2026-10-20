@@ -79,7 +79,7 @@ LEXICON = {
 # the reading F5 already gives from the plain spelling (measured by
 # pronounce_model/eval.py), so a misclassification there costs nothing.
 HETERONYM_RESPELL = {
-    "live_adj": "lyve", "live_vrb": "liv",
+    "live_adj": "lighv", "live_vrb": "liv",
     "lives_nou": "lyves", "lives_vrb": None,
     "read_past": None, "read_present": "reed",
     "lead_nou": "led", "lead_nou-vrb": None,
@@ -123,7 +123,9 @@ _DOTTED = re.compile(r"(?<![\w.])(\.?[A-Za-z_][\w\-]*(?:\.[A-Za-z_][\w\-]*)+|\.[
 _WORD = re.compile(r"[A-Za-z][A-Za-z0-9]*")
 # An identifier-ish token: letters/digits joined by "_" or "-".
 _IDENT = re.compile(r"(?<![\w'])[A-Za-z][A-Za-z0-9]*(?:[_-]+[A-Za-z0-9]+)*(?![\w'])")
-_CAMEL = re.compile(r"[A-Z]+(?![a-z])|[A-Z]?[a-z]+|[0-9]+")
+# "PDFs" and "GPUs" are plural initialisms, not "PD" + "Fs".
+_CAMEL = re.compile(r"[A-Z]{2,}s(?![a-z])|[A-Z]+(?![a-z])|[A-Z]?[a-z]+|[0-9]+")
+_CAPS_HEAD = re.compile(r"[A-Z]{2}[a-z]{2,}")  # "GOswim"; "HTTPServer" keeps camel rules
 # Context tokens for the heteronym models: words and clause punctuation.
 _CTX = re.compile(r"[A-Za-z0-9']+|[.,;:!?]")
 
@@ -284,6 +286,12 @@ def _split_ident(m, table, protected):
             out.append(piece)
             continue
         sub = _CAMEL.findall(piece) if re.search(r"[a-z][A-Z]|[A-Z]{2}[a-z]", piece) else [piece]
+        if _CAPS_HEAD.fullmatch(piece) and len(sub) > 1:
+            # Camel rules would cut "GOswim" into "G" + "Oswim"; a word split
+            # of the whole ("go swim") is the likelier reading when there is one.
+            whole = split_word(piece.lower())
+            if whole:
+                sub = whole
         for k, s in enumerate(sub):
             if k and not s.isupper():
                 s = s.lower()  # "isLive" -> "is live", but "getAPIKey" keeps "API"

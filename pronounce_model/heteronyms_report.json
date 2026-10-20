@@ -18,19 +18,19 @@
   "wiki_eval_n": 10
  },
  "content": {
-  "cv_acc": 0.965,
+  "cv_acc": 0.95,
   "n": {
-   "content_adj-nou-vrb": 25,
-   "content_nou": 146
+   "content_adj-nou-vrb": 473,
+   "content_nou": 3146
   },
   "wiki_eval_acc": 0.9,
   "wiki_eval_n": 10
  },
  "desert": {
-  "cv_acc": 0.977,
+  "cv_acc": 0.992,
   "n": {
-   "desert_nou": 124,
-   "desert_vrb": 9
+   "desert_nou": 1492,
+   "desert_vrb": 103
   },
   "wiki_eval_acc": 1.0,
   "wiki_eval_n": 10
@@ -63,19 +63,19 @@
   "wiki_eval_n": 10
  },
  "minute": {
-  "cv_acc": 0.953,
+  "cv_acc": 0.929,
   "n": {
-   "minute": 136,
-   "minute_adj": 33
+   "minute": 3136,
+   "minute_adj": 561
   },
-  "wiki_eval_acc": 1.0,
+  "wiki_eval_acc": 0.8,
   "wiki_eval_n": 10
  },
  "object": {
-  "cv_acc": 0.972,
+  "cv_acc": 0.98,
   "n": {
-   "object_nou": 160,
-   "object_vrb": 21
+   "object_nou": 1986,
+   "object_vrb": 184
   },
   "wiki_eval_acc": 1.0,
   "wiki_eval_n": 10
@@ -90,12 +90,12 @@
   "wiki_eval_n": 10
  },
  "produce": {
-  "cv_acc": 0.928,
+  "cv_acc": 0.975,
   "n": {
-   "produce_nou": 23,
-   "produce_vrb": 171
+   "produce_nou": 339,
+   "produce_vrb": 3171
   },
-  "wiki_eval_acc": 0.9,
+  "wiki_eval_acc": 1.0,
   "wiki_eval_n": 10
  },
  "read": {
@@ -117,21 +117,21 @@
   "wiki_eval_n": 9
  },
  "refuse": {
-  "cv_acc": 0.953,
+  "cv_acc": 0.908,
   "n": {
-   "refuse_nou": 22,
-   "refuse_vrb": 105
+   "refuse_nou": 168,
+   "refuse_vrb": 550
   },
-  "wiki_eval_acc": 0.9,
+  "wiki_eval_acc": 1.0,
   "wiki_eval_n": 10
  },
  "resume": {
-  "cv_acc": 0.985,
+  "cv_acc": 0.983,
   "n": {
-   "resume_nou": 23,
-   "resume_vrb": 108
+   "resume_nou": 51,
+   "resume_vrb": 780
   },
-  "wiki_eval_acc": 0.9,
+  "wiki_eval_acc": 1.0,
   "wiki_eval_n": 10
  },
  "row": {
@@ -144,10 +144,10 @@
   "wiki_eval_n": 10
  },
  "tear": {
-  "cv_acc": 0.878,
+  "cv_acc": 0.933,
   "n": {
    "tear_nou": 39,
-   "tear_vrb": 84
+   "tear_vrb": 276
   },
   "wiki_eval_acc": 0.8,
   "wiki_eval_n": 10
@@ -171,30 +171,30 @@
   "wiki_eval_n": 10
  },
  "wind": {
-  "cv_acc": 0.978,
+  "cv_acc": 0.961,
   "n": {
-   "wind_nou": 156,
-   "wind_vrb": 22
+   "wind_nou": 3156,
+   "wind_vrb": 364
   },
   "wiki_eval_acc": 1.0,
   "wiki_eval_n": 10
  },
  "winds": {
-  "cv_acc": 0.941,
+  "cv_acc": 0.951,
   "n": {
-   "winds_nou": 109,
-   "winds_vrb": 9
+   "winds_nou": 3109,
+   "winds_vrb": 677
   },
   "wiki_eval_acc": 1.0,
   "wiki_eval_n": 10
  },
  "wound": {
-  "cv_acc": 0.943,
+  "cv_acc": 0.955,
   "n": {
-   "wound_nou-vrb": 88,
-   "wound_vrb": 52
+   "wound_nou-vrb": 782,
+   "wound_vrb": 274
   },
-  "wiki_eval_acc": 0.8,
+  "wiki_eval_acc": 0.7,
   "wiki_eval_n": 10
  }
 }

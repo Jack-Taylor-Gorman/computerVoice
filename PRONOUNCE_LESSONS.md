@@ -2,6 +2,56 @@
 
 Dated entries, newest first. The heading of each entry is the lesson.
 
+## 2026-10-20 — A generated wrong list is only as good as the expectation; read the decode before trusting a fail
+
+The first screen of 198 rare words failed 73 of 396 takes. Reading the decodes
+showed that most of those failures were the scorer's fault. g2p_en guessed
+"queued" as K W EY D and "plugin" as P L UW G IH N, while Majel said both
+correctly. The IPA conversion turned "rerun" into `ɹ ɪɹ ʌ n`, because it
+coloured a vowel with the R of the next syllable. It also expected `ɔɪ`
+where this recogniser writes `oɪ`, and `ɔː` where an American speaker says
+`ɑː`. Substituting secondary-stressed vowels also failed fluent reductions
+("caveat" as "kav-ee-ut"). After those fixes the same audio scored 364 of
+396, and the remaining failures were real.
+
+## 2026-10-20 — F5 misreads ordinary words too, not only jargon
+
+The screen found "deploys" said as "deplows", "pasting" with a short A,
+"unread" as "un-raid", "retry" as "ret-ree" and "retries" as "re-trays". All
+of them are in CMUdict. Word frequency alone does not predict which words
+F5 gets wrong, so the screen must synthesise the words rather than guess.
+
+## 2026-10-20 — A candidate passes against the wrong list it was given, so put the likely misreading in it
+
+"laiv" passed 12 of 12 takes for "live" (the adjective) and was heard as
+`l eɪ v` ("lave") every time. "lave" was not in that case's wrong list.
+The generated wrong lists (every vowel in the stressed slot) avoid this.
+"lighv" was heard as `l aɪ v` in all 12 takes across four sentences, against
+10 of 12 for "lyve", so it replaced "lyve".
+
+## 2026-10-20 — Tagger-labelled corpus data helps rare readings and hurts common ones
+
+WikiText-103 sentences labelled by NLTK's perceptron tagger lifted "content",
+"object" and "minute". For "live" and "read" they made held-out phrases
+worse: "I read it yesterday" went to the present tense. Used only for the
+eleven words whose hand-labelled data is thin, the text-level check rose
+from 135 to 140 of 146. Pruning weights below 0.05 then halved the file to
+1.1 MB, and the check scored 141.
+
+## 2026-10-20 — The socket can vanish under a running eval; retry the connection
+
+At 14:08 something outside this loop removed `/tmp/majel_f5.sock`. The
+watchdog respawned the front within seven seconds, but one eval run died
+on `FileNotFoundError`. `eval.py say()` now retries the connection for up
+to a minute.
+
+## 2026-10-20 — Mixed-case tokens need their own rules before camelCase splitting
+
+"PDFs" became "PD fs" and Jack's own spelling "GOswim" became "G oswim".
+Plural initialisms (`[A-Z]{2,}s`) now stay whole. Two capitals followed by
+lower case are word-split as a whole ("go swim"), but "HTTPServer" keeps
+the camel rule.
+
 ## 2026-10-20 — F5 reads "y" as a short I inside a respelling; use a real word with the right vowel
 
 "Wynd" (for "wind" the verb) was heard as `w ɪ n d` in all three takes, and

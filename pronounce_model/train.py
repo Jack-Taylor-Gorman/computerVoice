@@ -12,11 +12,18 @@ Training data for the heteronyms:
   - The Brown corpus (NLTK), labelled through its part-of-speech tags for
     the heteronyms where the tag decides the pronunciation ("read"/VBD ->
     read_past, "live"/JJ -> live_adj, ...).
+  - WikiText-103 sentences (wikitext_extract.py), labelled through NLTK's
+    perceptron part-of-speech tagger the same way as Brown. Noisier than
+    the hand-labelled sources, so each reading is capped at WIKITEXT_CAP.
   - domain_examples.tsv: a few hand-labelled sentences in the style of
     Majel's summaries (none of them are eval phrases).
 
 Run with the system python3.10 (scikit-learn) and the training libraries:
-  PYTHONPATH=~/.cache/pronounce_train_libs /usr/bin/python3.10 pronounce_model/train.py [words|heteronyms|all]
+  PYTHONPATH=~/.cache/pronounce_train_libs /usr/bin/python3.10 pronounce_model/train.py [words|heteronyms|all] [--out DIR]
+
+Write to a scratch --out first and check it (het_check.py, eval.py):
+computerize.py reloads the models on every summary, so a file written here
+is live at once.
 """
 import csv
 import gzip
@@ -32,6 +39,14 @@ import pronounce  # noqa: E402  (the runtime: features() must match exactly)
 
 WIKI = Path.home() / ".cache" / "pronounce_data" / "WikipediaHomographData" / "data"
 DOMAIN = HERE / "domain_examples.tsv"
+WIKITEXT = Path.home() / ".cache" / "pronounce_data" / "wikitext_sents.tsv"
+WIKITEXT_CAP = 3000
+# Tagger-labelled sentences only for words whose gold data is thin. For
+# "live" and "read" they made held-out phrases worse ("I read it yesterday"
+# went to read_present), so those keep the gold sources alone.
+WIKITEXT_WORDS = {"content", "minute", "desert", "object", "refuse", "resume", "produce", "wind",
+                  "winds", "wound", "tear"}
+OUT = Path(sys.argv[sys.argv.index("--out") + 1]) if "--out" in sys.argv else HERE
 
 HETERONYMS = sorted({k.rsplit("_", 1)[0] if "_" in k else k for k in pronounce.HETERONYM_RESPELL})
 
@@ -119,6 +134,65 @@ def brown_examples():
     return out
 
 
+# Penn tag -> wordid for the WikiText sentences. Nouns that could be either
+# reading ("lead", "tear", "row", "close" as in "the close of play") are left out.
+PENN_RULES = {
+    "live": [("JJ", "live_adj"), ("RB", "live_adj"), ("VB", "live_vrb"), ("VBP", "live_vrb")],
+    "lives": [("NNS", "lives_nou"), ("VBZ", "lives_vrb")],
+    "read": [("VBD", "read_past"), ("VBN", "read_past"), ("VB", "read_present"), ("VBP", "read_present")],
+    "close": [("JJ", "close_adj-nou"), ("RB", "close_adj-nou"), ("VB", "close_vrb"), ("VBP", "close_vrb")],
+    "use": [("NN", "use_nou"), ("VB", "use_vrb"), ("VBP", "use_vrb")],
+    "uses": [("NNS", "uses_nou"), ("VBZ", "uses_vrb")],
+    "record": [("NN", "record_nou"), ("JJ", "record_nou"), ("VB", "record_vrb"), ("VBP", "record_vrb")],
+    "present": [("JJ", "present_adj-nou"), ("NN", "present_adj-nou"), ("VB", "present_vrb"), ("VBP", "present_vrb")],
+    "object": [("NN", "object_nou"), ("VB", "object_vrb"), ("VBP", "object_vrb")],
+    "content": [("NN", "content_nou"), ("JJ", "content_adj-nou-vrb"), ("VB", "content_adj-nou-vrb")],
+    "minute": [("JJ", "minute_adj"), ("NN", "minute")],
+    "desert": [("NN", "desert_nou"), ("JJ", "desert_nou"), ("VB", "desert_vrb"), ("VBP", "desert_vrb")],
+    "produce": [("NN", "produce_nou"), ("VB", "produce_vrb"), ("VBP", "produce_vrb")],
+    "refuse": [("NN", "refuse_nou"), ("VB", "refuse_vrb"), ("VBP", "refuse_vrb")],
+    "resume": [("NN", "resume_nou"), ("VB", "resume_vrb"), ("VBP", "resume_vrb")],
+    "wind": [("NN", "wind_nou"), ("VB", "wind_vrb"), ("VBP", "wind_vrb")],
+    "winds": [("NNS", "winds_nou"), ("VBZ", "winds_vrb")],
+    "wound": [("NN", "wound_nou-vrb"), ("VB", "wound_nou-vrb"), ("VBD", "wound_vrb"), ("VBN", "wound_vrb")],
+    "tear": [("VB", "tear_vrb"), ("VBP", "tear_vrb")],
+    "lead": [("VB", "lead_nou-vrb"), ("VBP", "lead_nou-vrb")],
+    "row": [("VB", "row_1"), ("VBP", "row_1")],
+}
+
+
+def wikitext_examples():
+    import random
+    from nltk import pos_tag
+    if not WIKITEXT.exists():
+        return {}
+    by = defaultdict(lambda: defaultdict(list))
+    with open(WIKITEXT, encoding="utf-8") as f:
+        for line in f:
+            word, sentence = line.rstrip("\n").split("\t", 1)
+            rules = PENN_RULES.get(word)
+            if not rules or word not in WIKITEXT_WORDS:
+                continue
+            toks = _tokens(sentence)
+            idx = [k for k, t in enumerate(toks) if t.lower() == word]
+            if not idx:
+                continue
+            tag = pos_tag(toks)[idx[0]][1]
+            for t, label in rules:
+                if tag == t:
+                    by[word][label].append((toks, idx[0], label))
+                    break
+    rng = random.Random(0)
+    out = {}
+    for word, labels in by.items():
+        out[word] = []
+        for label, rows in labels.items():
+            rng.shuffle(rows)
+            out[word] += rows[:WIKITEXT_CAP]
+    print("wikitext:", {w: dict(Counter(l for _, _, l in rows)) for w, rows in out.items()})
+    return out
+
+
 def _find(toks, words, i):
     """Index in pronounce's tokenisation of words[i] (re-tokenised Brown)."""
     before = len(_tokens(" ".join(words[:i])))
@@ -178,9 +252,11 @@ def build_heteronyms():
     pronounce._pos_classes = {w: cls for cls, ws in pos.items() for w in ws.split()}
     brown = brown_examples()
     domain = domain_examples()
+    wikitext = wikitext_examples()
     models, report = {}, {}
     for word in HETERONYMS:
-        train = wiki_examples(word, "train") + brown.get(word, []) + domain.get(word, []) * 3
+        train = (wiki_examples(word, "train") + brown.get(word, []) + wikitext.get(word, [])
+                 + domain.get(word, []) * 3)
         held = wiki_examples(word, "eval")
         labels = sorted({lab for _, _, lab in train + held})
         counts = Counter(lab for _, _, lab in train + held)
@@ -210,19 +286,20 @@ def build_heteronyms():
         names = vec.get_feature_names_out()
         coef = []
         for row in clf.coef_:
-            coef.append({names[k]: round(float(v), 3) for k, v in enumerate(row) if abs(v) >= 0.02})
+            coef.append({names[k]: round(float(v), 3) for k, v in enumerate(row) if abs(v) >= 0.05})
         models[word] = {"labels": [str(c) for c in clf.classes_], "coef": coef,
                         "b": [round(float(v), 4) for v in clf.intercept_]}
         report[word] = r
     models["_pos"] = pos
-    (HERE / "heteronyms.json").write_text(json.dumps(models, separators=(",", ":"), sort_keys=True))
-    (HERE / "heteronyms_report.json").write_text(json.dumps(report, indent=1, sort_keys=True))
+    OUT.mkdir(parents=True, exist_ok=True)
+    (OUT / "heteronyms.json").write_text(json.dumps(models, separators=(",", ":"), sort_keys=True))
+    (OUT / "heteronyms_report.json").write_text(json.dumps(report, indent=1, sort_keys=True))
     print(json.dumps(report, indent=1, sort_keys=True))
-    print(f"heteronyms.json: {len(models) - 1} models, {(HERE / 'heteronyms.json').stat().st_size // 1024} KB")
+    print(f"heteronyms.json: {len(models) - 1} models, {(OUT / 'heteronyms.json').stat().st_size // 1024} KB")
 
 
 if __name__ == "__main__":
-    what = sys.argv[1] if len(sys.argv) > 1 else "all"
+    what = sys.argv[1] if len(sys.argv) > 1 and not sys.argv[1].startswith("--") else "all"
     if what in ("words", "all"):
         build_words()
     if what in ("heteronyms", "all"):

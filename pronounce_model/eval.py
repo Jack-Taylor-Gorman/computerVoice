@@ -8,7 +8,7 @@ against the whole phrase spelled each way. A case passes when the expected
 pronunciation is the most likely one. Whisper is no use here: it forgives
 mispronunciation by design.
 
-  synth : python pronounce_model/eval.py synth NAME --cond raw|processed [--reps 2]
+  synth : python pronounce_model/eval.py synth NAME --cond raw|plain|processed [--reps 2]
           (stdlib only; writes /tmp/pronounce_eval/NAME/*.wav + manifest.json)
   score : venv/bin/python pronounce_model/eval.py score NAME
           (loads the recogniser on CPU, only if MemAvailable > 3 GB)
@@ -50,9 +50,19 @@ def mem_available_gb():
 
 
 def say(text, dst, timeout=120):
-    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    s.settimeout(timeout)
-    s.connect(SOCK)
+    # The watchdog respawns the front if the socket file disappears, which
+    # leaves a gap of several seconds; wait it out rather than abort a run.
+    for attempt in range(30):
+        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        s.settimeout(timeout)
+        try:
+            s.connect(SOCK)
+            break
+        except (FileNotFoundError, ConnectionRefusedError):
+            s.close()
+            if attempt == 29:
+                raise
+            time.sleep(2)
     s.sendall(json.dumps({"text": text, "dst": dst}).encode() + b"\n")
     data = b""
     while not data.endswith(b"\n"):
@@ -72,7 +82,14 @@ def synth(name, cond, reps):
     d.mkdir(parents=True, exist_ok=True)
     manifest = {"cond": cond, "reps": reps, "started": time.strftime("%Y-%m-%d %H:%M:%S"), "items": []}
     for c in cases:
-        sent = c["text"] if cond == "raw" else pronounce.apply(c["text"])
+        # plain: untouched by any pronounce.py; processed: this checkout's
+        # pronounce.apply, so the result does not depend on the worker's copy.
+        if cond == "raw":
+            sent = c["text"]
+        elif cond == "plain":
+            sent = pronounce.RAW_PREFIX + c["text"]
+        else:
+            sent = pronounce.RAW_PREFIX + pronounce.apply(c["text"])
         for r in range(reps):
             wav = d / f"{c['id']}__{r}.wav"
             t = time.monotonic()
@@ -101,7 +118,9 @@ def arpa_to_ipa(phones):
         p = phones[i]
         base, stress = p.rstrip("012"), p[len(p.rstrip("012")):]
         nxt = phones[i + 1] if i + 1 < len(phones) else ""
-        if base in R_COLOURED and nxt == "R":
+        after = phones[i + 2].rstrip("012") if i + 2 < len(phones) else ""
+        # Only a syllable-final R colours the vowel: "rerun" is ri-run, not rir-un.
+        if base in R_COLOURED and nxt == "R" and after not in VOWELS:
             out.append(R_COLOURED[base])
             i += 2
             continue
@@ -144,6 +163,23 @@ def _ah_variants(phones):
     return out
 
 
+# The recogniser writes OY as either token, and AO as ɑː for many American
+# speakers (the cot-caught merger); either counts for the target word.
+IPA_EQUIV = {"ɔɪ": "oɪ", "ɔː": "ɑː"}
+
+
+def _ipa_variants(toks):
+    idx = [k for k, t in enumerate(toks) if t in IPA_EQUIV]
+    out = []
+    for mask in range(2 ** len(idx)):
+        v = list(toks)
+        for b, k in enumerate(idx):
+            if mask >> b & 1:
+                v[k] = IPA_EQUIV[v[k]]
+        out.append(v)
+    return out
+
+
 def sequences(case, lex):
     """For each pronunciation of the target (expected first), the IPA token
     sequences of the whole phrase; the case's own "text" may already be a
@@ -155,10 +191,11 @@ def sequences(case, lex):
     for variant in [case["expect"]] + case["wrong"]:
         seqs = []
         for ph in _ah_variants(variant.split()):
-            toks = []
-            for k, w in enumerate(words):
-                toks += arpa_to_ipa(ph if k == slot else lex[w])
-            seqs.append(toks)
+            for target_ipa in _ipa_variants(arpa_to_ipa(ph)):
+                toks = []
+                for k, w in enumerate(words):
+                    toks += target_ipa if k == slot else arpa_to_ipa(lex[w])
+                seqs.append(toks)
         out.append(seqs)
     return out
 

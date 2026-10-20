@@ -1,0 +1,94 @@
+# Expected pronunciation (ARPAbet) of each built-in LEXICON entry, for the
+# audit in oov.py. "L" means the word is said as its letter names.
+# word	phones
+repo	R IY1 P OW0
+repos	R IY1 P OW0 Z
+regex	R EH1 JH EH0 K S
+regexes	R EH1 JH EH0 K S IH0 Z
+enum	IY1 N AH0 M
+enums	IY1 N AH0 M Z
+readme	R IY1 D M IY1
+env	EH1 N V IY1
+venv	V IY1 EH1 N V
+evdev	IY1 V IY1 D EH1 V
+eval	IY1 V AE2 L
+deque	D EH1 K
+async	EY1 S IH2 NG K
+ascii	AE1 S K IY0
+api	L
+apis	EY1 P IY1 AY1 Z
+jpeg	JH EY1 P EH2 G
+jpg	JH EY1 P EH2 G
+png	L
+yaml	Y AE1 M AH0 L
+yml	Y AE1 M AH0 L
+macos	M AE1 K OW1 EH1 S
+ios	AY1 OW1 EH1 S
+py	P AY1
+pyside	P AY1 S AY2 D
+pytest	P AY1 T EH2 S T
+pypi	P AY1 P IY1 AY1
+numpy	N AH1 M P AY2
+scipy	S AY1 P AY2
+gui	G UW1 IY0
+ui	L
+cli	L
+ai	L
+io	L
+nginx	EH1 N JH AH0 N EH1 K S
+systemd	S IH1 S T AH0 M D IY1
+udev	Y UW1 D EH2 V
+json	JH EY1 S AH0 N
+toml	T AA1 M AH0 L
+npm	L
+pnpm	L
+cache	K AE1 SH
+cached	K AE1 SH T
+caches	K AE1 SH AH0 Z
+caching	K AE1 SH IH0 NG
+github	G IH1 T HH AH2 B
+gitlab	G IH1 T L AE2 B
+gitignore	G IH1 T IH0 G N AO2 R
+stdin	S T AE1 N D ER0 D IH1 N
+stdout	S T AE1 N D ER0 D AW1 T
+stderr	S T AE1 N D ER0 D EH1 R ER0
+sql	S IY1 K W AH0 L
+sqlite	S IY1 K W AH0 L AY2 T
+url	L
+urls	Y UW1 AA1 R EH1 L Z
+usb	L
+hid	L
+hidraw	EY1 CH AY1 D IY1 R AO1
+ssh	L
+xdotool	EH1 K S D OW1 T UW2 L
+pipewire	P AY1 P W AY2 ER0
+wav	W EY1 V
+svg	L
+md	L
+sh	L
+js	L
+ts	L
+tsx	L
+jsx	L
+css	L
+html	L
+txt	T EH1 K S T
+csv	L
+pdf	L
+exe	L
+db	L
+cfg	K AH0 N F IH1 G
+ini	IH1 N IY0
+rs	L
+cpp	S IY1 P L AH1 S P L AH1 S
+gz	L
+uk	L
+tts	L
+audeze	AO1 D IY0 Z IY2
+hq	L
+id	L
+ids	AY1 D IY1 Z
+sudo	S UW1 D UW0
+majel	M EY1 JH EH0 L
+vite	V IY1 T
+tkinter	T IY1 K IH1 N T ER0
