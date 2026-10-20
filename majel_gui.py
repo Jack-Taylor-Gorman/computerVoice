@@ -36,6 +36,10 @@ BG_PID = ROOT / ".background.pid"
 BG_DIR = ROOT / "sounds" / "background"
 TREK_DB = ROOT / "storage" / "trekdata.sqlite"
 
+F5_SCRIPT = "f5_daemon.py"
+F5_WRAPPER = ROOT / "run_f5_daemon.sh"
+F5_SOCK = Path("/tmp/majel_f5.sock")
+
 DAEMONS = {
     "background.py":   "BACKGROUND AMBIENT",
     "voice_sfx.py":    "KEYBOARD SFX",
@@ -88,7 +92,10 @@ RAIL_W = 168
 ELBOW_R = 80
 ELBOW_H = 96                          # vertical span of top/bottom elbows
 WIN_W, WIN_H = 1100, 1180  # bumped to fit BRIEFING section without overflowing the bottom elbow
-MIN_W, MIN_H = 1000, 920
+# The window can now be shrunk well below the content height — the content
+# area scrolls (wheel / PgUp / PgDn / Home / End).
+MIN_W, MIN_H = 1000, 460
+SCROLL_STEP = 40                      # px moved per wheel notch
 
 CONTENT_X = RAIL_W + GUTTER + 28      # left edge of content area, well clear of elbow curve
 # Content y0 sits a few px below the elbow's bottom edge so the first content
@@ -181,6 +188,11 @@ def is_running(script: str) -> bool:
 
 
 def kill_script(script: str) -> None:
+    if script == F5_SCRIPT:
+        # Kill the watchdog first, otherwise it instantly respawns the daemon
+        # we're about to kill and the restart is a no-op.
+        subprocess.run(["pkill", "-f", F5_WRAPPER.name],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     subprocess.run(["pkill", "-f", f"/{script}$"],
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
@@ -190,6 +202,18 @@ def start_script(script: str, extra_env: dict | None = None) -> None:
     if extra_env:
         env.update(extra_env)
     logf = f"/tmp/majel_{script.replace('.py', '')}.log"
+    # f5_daemon.py must be launched through its watchdog wrapper. Starting the
+    # daemon bare leaves it unsupervised, and worse: if the watchdog is still
+    # running it respawns its own copy, so two daemons fight over
+    # /tmp/majel_f5.sock and speak.py falls back to the alert tone.
+    if script == F5_SCRIPT:
+        with open(logf, "ab") as log:
+            subprocess.Popen(
+                ["/usr/bin/env", "bash", str(F5_WRAPPER)],
+                stdout=log, stderr=log, stdin=subprocess.DEVNULL,
+                start_new_session=True, env=env,
+            )
+        return
     with open(logf, "ab") as log:
         p = subprocess.Popen(
             [str(ROOT / "venv" / "bin" / "python"), str(ROOT / script)],
@@ -470,10 +494,27 @@ class LCARSApp:
         # left line up exactly with the section start/end on the right.
         self._section_layout: list[tuple[str, str, int, int]] = []
 
+        # Vertical scrolling state. Content is drawn at absolute canvas
+        # coordinates; scrolling moves every item tagged "content" while the
+        # chrome (bars, elbows, rail) is redrawn at the new offset so it stays
+        # pinned to the window frame.
+        self._scroll_y = 0
+        self._content_h = 0
+        self._canvas_windows: list[int] = []
+
         # Build content first (records section bounds), THEN draw chrome
         # so the rail panels can size themselves to match.
         self._build_content()
+        # Everything created so far is content — tag it so it can be scrolled.
+        for item in self.canvas.find_all():
+            self.canvas.addtag_withtag("content", item)
+        self._canvas_windows = list(self.canvas.find_withtag("content"))
+        self._canvas_windows = [i for i in self._canvas_windows
+                                if self.canvas.type(i) == "window"]
+        bbox = self.canvas.bbox("content")
+        self._content_h = (bbox[3] if bbox else 0) + 12
         self._draw_chrome()
+        self._bind_scroll()
 
         self._refresh_status()
         self._refresh_bottom_bar()
@@ -498,9 +539,9 @@ class LCARSApp:
 
         W, H = self.W, self.H
 
-        # ── Top elbow: a single bluey rectangle (RAIL_W × 96) with ONE
+        # ── Top elbow: a single bluey rectangle (RAIL_W × ELBOW_H) with ONE
         # rounded corner at the top-left.
-        draw_elbow_block(c, 0, 0, RAIL_W, 96, LCARS["bluey"],
+        draw_elbow_block(c, 0, 0, RAIL_W, ELBOW_H, LCARS["bluey"],
                          round_corner="nw", radius=ELBOW_R)
 
         # ── Top bar: title segment + date segment, FLUSH against the elbow's
@@ -529,9 +570,9 @@ class LCARSApp:
                                             fill=LCARS["bg"], anchor="center",
                                             font=self.f_label, tags="chrome")
 
-        # ── Bottom elbow: single orange rectangle (RAIL_W × 96) with ONE
+        # ── Bottom elbow: single orange rectangle (RAIL_W × ELBOW_H) with ONE
         # rounded corner at the bottom-left. Matches the top-bar date pill.
-        draw_elbow_block(c, 0, H - 96, RAIL_W, 96, LCARS["orange"],
+        draw_elbow_block(c, 0, H - ELBOW_H, RAIL_W, ELBOW_H, LCARS["orange"],
                          round_corner="sw", radius=ELBOW_R)
 
         # ── Bottom bar: info segments flush, no margins, full bar height
@@ -582,10 +623,15 @@ class LCARSApp:
         # into the orange corner piece below).
         if self._section_layout:
             N = len(self._section_layout)
-            # Build the split y-coordinates between adjacent panels.
+            off = getattr(self, "_scroll_y", 0)
+            # Build the split y-coordinates between adjacent panels. Interior
+            # splits track the scrolled content so each panel stays aligned
+            # with its section; the outer edges stay pinned to the elbows.
             splits = [ELBOW_H]
             for i in range(1, N):
-                splits.append(self._section_layout[i][2])
+                splits.append(max(ELBOW_H,
+                                  min(H - ELBOW_H,
+                                      self._section_layout[i][2] - off)))
             splits.append(H - ELBOW_H)
             for i, (label, color, _ytop, _ybot) in enumerate(self._section_layout):
                 py_top = splits[i]
@@ -607,9 +653,77 @@ class LCARSApp:
         if new_w == self.W and new_h == self.H:
             return
         self.W, self.H = new_w, new_h
+        # A taller window may have made part of the current scroll offset
+        # invalid; re-clamp before redrawing.
+        self._scroll_to(self._scroll_y)
         if self._resize_after:
             self.canvas.after_cancel(self._resize_after)
         self._resize_after = self.canvas.after(50, self._draw_chrome)
+
+    # ── Scrolling ─────────────────────────────────────────────────────────
+    def _bind_scroll(self):
+        """Wheel + keyboard scrolling for the content area.
+
+        Bound on the toplevel (bind_all) so the wheel works even when the
+        pointer is over an embedded widget (API key entry, volume sliders).
+        """
+        r = self.root
+        r.bind_all("<MouseWheel>",
+                   lambda e: self._scroll_by(-1 if e.delta > 0 else 1))
+        r.bind_all("<Button-4>", lambda e: self._scroll_by(-1))
+        r.bind_all("<Button-5>", lambda e: self._scroll_by(1))
+        r.bind("<Prior>", lambda e: self._scroll_by(-8))
+        r.bind("<Next>", lambda e: self._scroll_by(8))
+        r.bind("<Home>", lambda e: self._scroll_to(0))
+        r.bind("<End>", lambda e: self._scroll_to(self._max_scroll()))
+
+    def _max_scroll(self) -> int:
+        """Largest valid scroll offset: how far content overflows the frame."""
+        viewport_bottom = self.H - ELBOW_H
+        return max(0, self._content_h - viewport_bottom)
+
+    def _scroll_by(self, steps: int):
+        self._scroll_to(self._scroll_y + steps * SCROLL_STEP)
+
+    def _scroll_to(self, offset: int):
+        offset = max(0, min(int(offset), self._max_scroll()))
+        delta = offset - self._scroll_y
+        if delta:
+            self.canvas.move("content", 0, -delta)
+            self._scroll_y = offset
+        # Embedded widgets (Entry/Scale) always paint above canvas items, so
+        # they'd bleed over the top/bottom bars instead of sliding under them.
+        # Hide any that have scrolled out of the content viewport.
+        self._sync_canvas_windows()
+        self._draw_chrome()
+
+    def _sync_canvas_windows(self):
+        c = self.canvas
+        top, bottom = ELBOW_H, self.H - ELBOW_H
+        for item in self._canvas_windows:
+            try:
+                y1, y2 = c.bbox(item)[1], c.bbox(item)[3]
+            except (TypeError, tk.TclError):
+                continue
+            visible = y2 > top and y1 < bottom
+            c.itemconfigure(item, state="normal" if visible else "hidden")
+
+    def _adopt_content(self, before: set[int]):
+        """Tag items created after `before` as scrollable content.
+
+        Handlers that redraw part of the UI (e.g. `_draw_mode_pills`) build at
+        unscrolled coordinates, so the new items also get shifted to the
+        current scroll offset.
+        """
+        c = self.canvas
+        new = [i for i in c.find_all() if i not in before]
+        for item in new:
+            c.addtag_withtag("content", item)
+            if c.type(item) == "window":
+                self._canvas_windows.append(item)
+        if new and self._scroll_y:
+            for item in new:
+                c.move(item, 0, -self._scroll_y)
 
     def _stardate(self) -> str:
         """Return a combined date + TNG-style stardate string.
@@ -788,9 +902,9 @@ class LCARSApp:
             ("AUDIO", LCARS["butterscotch"], sec_audio_top, sec_audio_bot))
         y += 8
 
-        # ── MUSIC PROGRAM ────────────────────────────────────────────────
+        # ── BGM PROGRAM ──────────────────────────────────────────────────
         sec_music_top = y
-        c.create_text(x0, y, anchor="nw", text="MUSIC PROGRAM",
+        c.create_text(x0, y, anchor="nw", text="BGM PROGRAM",
                       fill=LCARS["sunflower"], font=self.f_section)
         y += 22
 
@@ -888,7 +1002,7 @@ class LCARSApp:
         y += 26
         sec_music_bot = y
         self._section_layout.append(
-            ("MUSIC", LCARS["bluey"], sec_music_top, sec_music_bot))
+            ("BGM", LCARS["bluey"], sec_music_top, sec_music_bot))
         y += 10
 
         # ── BRIEFING ─────────────────────────────────────────────────────
@@ -1129,6 +1243,7 @@ class LCARSApp:
 
     def _draw_mode_pills(self):
         c = self.canvas
+        before = set(c.find_all())
         # Delete prior mode pills
         for suf in ("mode_offline", "mode_api"):
             for item in c.find_all():
@@ -1157,6 +1272,7 @@ class LCARSApp:
                 round_side=side, font=self.f_label,
                 tag_suffix=f"mode_{mode}",
             )
+        self._adopt_content(before)
 
     def _set_mode(self, mode: str):
         self.mode_var.set(mode)
@@ -1561,6 +1677,13 @@ class LCARSApp:
             running = is_running(script)
             pill = self._svc_status_pills.get(script)
             if not pill:
+                continue
+            # The F5 daemon takes ~20s to load the model before it binds its
+            # socket. Report that window as LOADING rather than ONLINE — it
+            # can't voice anything until the socket exists.
+            if script == F5_SCRIPT and running and not F5_SOCK.exists():
+                pill.set_text("LOADING…")
+                pill.set_color(LCARS["butterscotch"], fg=LCARS["bg"])
                 continue
             pill.set_text("ONLINE" if running else "OFFLINE")
             pill.set_color(LCARS["lima_bean"] if running else LCARS["red"],

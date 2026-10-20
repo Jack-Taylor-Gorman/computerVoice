@@ -69,3 +69,9 @@ ckpts/
 # Briefing corpus — markdown + JSONL log generated per project briefing.
 # May contain in-flight project prose; gitignored by default.
 dataset/briefings/
+
+# ── Severian (Roy Avers) training data and runtime state ──────────────
+dataset_avers/
+dataset_avers_book3/
+*.pid
+.session.lock

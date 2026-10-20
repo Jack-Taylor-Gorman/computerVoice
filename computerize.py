@@ -824,18 +824,19 @@ def _project_name() -> str:
 
 
 def _with_project_header(text: str) -> str:
-    """Prepend 'Project <Name>.' as a status preamble when MAJEL_PROJECT is set.
+    """Prepend 'Update to Project <Name>.' as a status preamble when
+    MAJEL_PROJECT is set.
 
-    The header is suppressed if the rewriter already named the project (case-
-    insensitive substring match) so back-to-back identical preambles do not
-    appear. Empty / unset project names are a no-op.
+    The "Update to" lead-in is deliberate: it buys the listener a beat to
+    register WHICH terminal/project is speaking before the substance arrives,
+    which matters when several Claude sessions are narrating at once. The
+    preamble is ALWAYS emitted (no dedup against the body) so every utterance
+    stays attributable to its session. Empty / unset names are a no-op.
     """
     name = _project_name()
     if not name or not text:
         return text
-    if name.lower() in text.lower():
-        return text
-    return f"Project {name}. {text}"
+    return f"Update to Project {name}. {text}"
 
 
 if __name__ == "__main__":

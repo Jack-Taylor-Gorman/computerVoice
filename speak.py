@@ -5,6 +5,7 @@ Usage: echo "Working." | speak.py
 Env: MAJEL=0 disables. MAJEL_VOICE overrides base TTS voice. MAJEL_CPU=1 forces CPU.
 """
 import asyncio
+import fcntl
 import json
 import os
 import random
@@ -35,14 +36,119 @@ def _signal_bg(sig: int) -> None:
         pass
 
 
+# Volumes we lowered on OTHER apps' sink-inputs while Majel speaks, kept so we
+# can put them back exactly. {sink_input_index: original_raw_volume}.
+_DUCKED_OTHERS: dict[str, int] = {}
+_PA_NORM = 65536          # PulseAudio PA_VOLUME_NORM (== 100%).
+_SERIAL_LOCK_FD = None    # held for the process lifetime; see main().
+
+
+def _bg_audio_pids() -> set[int]:
+    """PIDs whose sink-inputs belong to the ambient daemon (background.py and
+    its ffplay child). Those self-duck via SIGUSR1/2, so we must NOT touch
+    them here or we'd fight that controller and risk restoring a wrong level."""
+    pids: set[int] = set()
+    try:
+        bg = int(BG_PID_FILE.read_text().strip())
+    except (OSError, ValueError):
+        return pids
+    pids.add(bg)
+    try:
+        r = subprocess.run(["pgrep", "-P", str(bg)], capture_output=True,
+                           text=True, timeout=1)
+        for tok in (r.stdout or "").split():
+            if tok.isdigit():
+                pids.add(int(tok))
+    except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
+        pass
+    return pids
+
+
+def _list_sink_inputs() -> list[tuple[str, int, "int | None"]]:
+    """Return [(index, raw_volume, process_id)] for every active sink-input."""
+    try:
+        r = subprocess.run(["pactl", "list", "sink-inputs"],
+                           capture_output=True, text=True, timeout=2)
+    except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
+        return []
+    out: list = []
+    idx = vol = pid = None
+
+    def _flush():
+        if idx is not None and vol is not None:
+            out.append((idx, vol, pid))
+
+    for line in (r.stdout or "").splitlines():
+        s = line.strip()
+        if s.startswith("Sink Input #"):
+            _flush()
+            idx = s.split("#", 1)[1].strip()
+            vol = pid = None
+        elif vol is None and s.startswith("Volume:"):
+            m = re.search(r"(\d+)\s*/\s*\d+%", s)
+            if m:
+                vol = int(m.group(1))
+        elif pid is None and s.startswith("application.process.id"):
+            m = re.search(r'"(\d+)"', s)
+            if m:
+                pid = int(m.group(1))
+    _flush()
+    return out
+
+
+def _duck_others() -> None:
+    """Lower every OTHER application's volume while Majel speaks (classic
+    audio ducking). The residual level is the GUI's duck_volume slider
+    (~/.majel_config.json, default 6%), so one control governs all ducking.
+    Disable with MAJEL_DUCK_OTHERS=0. The ambient daemon is skipped (it ducks
+    itself); sink-inputs already quieter than the floor are left alone so we
+    never accidentally RAISE something."""
+    if os.environ.get("MAJEL_DUCK_OTHERS") == "0":
+        return
+    if not shutil.which("pactl"):
+        return
+    try:
+        pct = int(json.loads(
+            (Path.home() / ".majel_config.json").read_text()).get("duck_volume", 6))
+    except Exception:
+        pct = 6
+    pct = max(0, min(100, pct))
+    floor = int(_PA_NORM * pct / 100)
+    skip = _bg_audio_pids()
+    for idx, vol, pid in _list_sink_inputs():
+        if pid in skip or vol <= floor:
+            continue
+        _DUCKED_OTHERS[idx] = vol
+        try:
+            subprocess.run(["pactl", "set-sink-input-volume", idx, f"{pct}%"],
+                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                          timeout=2)
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+
+
+def _restore_others() -> None:
+    """Put every ducked sink-input back to the exact volume we captured."""
+    for idx, vol in list(_DUCKED_OTHERS.items()):
+        try:
+            subprocess.run(["pactl", "set-sink-input-volume", idx, str(vol)],
+                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                          timeout=2)
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+    _DUCKED_OTHERS.clear()
+
+
 def duck_background() -> None:
     import signal as _signal
-    _signal_bg(_signal.SIGUSR1)
+    _signal_bg(_signal.SIGUSR1)   # ambient daemon fades itself
+    _duck_others()                # everything else drops too
 
 
 def restore_background() -> None:
     import signal as _signal
     _signal_bg(_signal.SIGUSR2)
+    _restore_others()
 
 
 def _mic_in_use() -> bool:
@@ -132,7 +238,11 @@ def _patched_load(*a, **kw):
 _torch.load = _patched_load
 
 import edge_tts
-from rvc_python.infer import RVCInference
+# rvc_python is imported lazily inside the RVC branch below. Its dependency
+# chain (rvc_python -> soundfile -> cffi) breaks whenever those wheels are
+# upgraded, and a top-level import made that break fatal for the F5 path too:
+# speak.py died before reaching any synthesis, so every hook went silent.
+# The RVC branch is unreachable on the default f5 backend anyway.
 
 ROOT = Path(__file__).resolve().parent
 MODEL = ROOT / "Majel" / "Majel.pth"
@@ -286,6 +396,22 @@ def main() -> int:
         return 0
     text = text[:MAX_CHARS]
 
+    # Serialize ALL playback: utterances never overlap, they queue and play
+    # strictly in sequence no matter which caller (Stop hook, step hook, GUI
+    # briefing, loop-watcher, ad-hoc script) launched us. flock blocks (no
+    # LOCK_NB) so we wait our turn; the lock auto-releases when this process
+    # exits. Held on a DEDICATED file so it can never deadlock against callers
+    # that already wrap us in `flock /tmp/majel_speak.lock`. The fd is parked
+    # in a module global so it stays open (and the lock held) for the whole
+    # run. Disable with MAJEL_NO_SERIAL_LOCK=1.
+    global _SERIAL_LOCK_FD
+    if os.environ.get("MAJEL_NO_SERIAL_LOCK") != "1":
+        try:
+            _SERIAL_LOCK_FD = open("/tmp/majel_speak.play.lock", "w")
+            fcntl.flock(_SERIAL_LOCK_FD, fcntl.LOCK_EX)
+        except OSError:
+            _SERIAL_LOCK_FD = None
+
     # Latest-wins: by the time we hold the flock, a newer response for this
     # same session may have already queued behind us. hook.sh stamps each
     # request with a monotonic token in MAJEL_REQ_FILE; if the file now holds
@@ -421,6 +547,7 @@ def main() -> int:
         )
 
         if not infer_via_daemon(src_padded, dst_raw):
+            from rvc_python.infer import RVCInference
             device = "cuda:0" if os.environ.get("MAJEL_CPU") != "1" else "cpu"
             rvc = RVCInference(device=device)
             rvc.load_model(str(MODEL), index_path=INDEX, version="v2")

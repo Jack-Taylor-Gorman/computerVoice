@@ -9,43 +9,117 @@ exec 2>>"$LOG"
 export PYTHONNOUSERSITE=1
 echo "$(date +%H:%M:%S.%3N) hook.sh fired" >>"$LOG"
 PAYLOAD="$(cat)"
+# Tell buddy which terminal this reply came from, so headset Play/Pause
+# opens a channel to the session Majel is about to speak about.
+printf '%s' "$PAYLOAD" | /home/jackgorman/Desktop/Claude_Projects/buddy/stop_hook.py >/dev/null 2>&1 || true
 TRANSCRIPT="$(printf '%s' "$PAYLOAD" | "$DIR/venv/bin/python" -c 'import json,sys; print(json.load(sys.stdin).get("transcript_path",""))')"
 [ -z "$TRANSCRIPT" ] || [ ! -f "$TRANSCRIPT" ] && exit 0
 
 TEXT="$("$DIR/venv/bin/python" - "$TRANSCRIPT" <<'PY'
-# Extract every text block from the last assistant message and join
-# them so computerize.py (API mode) can synthesize a single Majel-style
-# synopsis of the entire reply.
+# Speak ONLY the assistant text from the CURRENT turn — the reply to the
+# most recent human prompt — never the previous interaction's text.
 #
-# Why this changed: previous logic took only the LAST text block to
-# avoid voicing intermediate-error language. But assistants often emit
-# the substantive content first ("Here is what I did. <table>") then a
-# short final status line ("Receiver up — PID 1490675.") — taking only
-# the last block loses everything except the trailing status.
-# Computerize.py's invariant 18 already instructs the rewriter to
-# report the FINAL state and skip discarded intermediate failures, so
-# joining all blocks is safe — the LLM filters them.
-import json, sys
+# Why this changed: the Stop hook can fire before Claude Code has flushed
+# this turn's final assistant text block to the transcript JSONL. The old
+# logic ("last assistant text block in the whole file") then picked up the
+# PREVIOUS turn's final text, so every spoken synopsis was one interaction
+# behind ("for the last interaction, not the current"). Fix: anchor on the
+# last genuine human prompt and only consider assistant text that comes
+# AFTER it; if that text hasn't landed on disk yet, poll briefly for it
+# rather than voicing the stale prior reply. If no current-turn text ever
+# appears (e.g. a turn that ended on a tool call), stay silent.
+#
+# As before, every text block of the chosen assistant message is joined so
+# computerize.py can synthesize one Majel-style synopsis of the whole reply
+# (invariant 18 already filters discarded intermediate failures).
+import json, sys, time
+
 path = sys.argv[1]
-last = ""
-with open(path) as f:
-    for line in f:
-        try:
-            o = json.loads(line)
-        except Exception:
+
+
+def is_human_prompt(o):
+    # A real typed prompt — not a tool_result echo, not a sub-agent sidechain.
+    if o.get("type") != "user" or o.get("isSidechain"):
+        return False
+    if "toolUseResult" in o:
+        return False
+    c = (o.get("message") or {}).get("content")
+    if isinstance(c, str):
+        return bool(c.strip())
+    if isinstance(c, list):
+        return not any(isinstance(b, dict) and b.get("type") == "tool_result"
+                       for b in c)
+    return False
+
+
+def current_turn_text():
+    try:
+        rows = []
+        with open(path) as f:
+            for line in f:
+                try:
+                    rows.append(json.loads(line))
+                except Exception:
+                    continue
+    except OSError:
+        return ""
+    # Anchor on the last human prompt; fall back to the whole file if none
+    # is found (e.g. a resumed/unusual transcript) so we never go silent
+    # in cases the old behaviour handled.
+    anchor = -1
+    for i, o in enumerate(rows):
+        if is_human_prompt(o):
+            anchor = i
+    # The final answer is the assistant text AFTER the turn's last tool
+    # activity. A turn is [preamble text] -> [tool calls] -> [final text];
+    # the preamble flushes early, so "last assistant text" alone would speak
+    # the preamble ("the first line of the response") whenever the real answer
+    # has not landed on disk yet. Anchoring past the last tool_use/tool_result
+    # skips every preamble and yields nothing until the answer flushes — so the
+    # poll waits for it instead of voicing the lead-in.
+    after = rows[anchor + 1:]
+
+    def _has_tool(o):
+        t = o.get("type")
+        cont = (o.get("message") or {}).get("content") or []
+        if not isinstance(cont, list):
+            return False
+        if t == "assistant":
+            return any(isinstance(c, dict) and c.get("type") == "tool_use"
+                       for c in cont)
+        if t == "user":
+            return any(isinstance(c, dict) and c.get("type") == "tool_result"
+                       for c in cont)
+        return False
+
+    last_tool = -1
+    for j, o in enumerate(after):
+        if not o.get("isSidechain") and _has_tool(o):
+            last_tool = j
+    final = ""
+    for j, o in enumerate(after):
+        if j <= last_tool:
             continue
-        if o.get("type") != "assistant":
+        if o.get("type") != "assistant" or o.get("isSidechain"):
             continue
-        msg = o.get("message", {})
-        blocks: list[str] = []
-        for c in msg.get("content", []) or []:
+        blocks = []
+        for c in (o.get("message") or {}).get("content", []) or []:
             if isinstance(c, dict) and c.get("type") == "text":
                 t = (c.get("text") or "").strip()
                 if t:
                     blocks.append(t)
         if blocks:
-            last = "\n\n".join(blocks)
-print(last)
+            final = "\n\n".join(blocks)
+    return final
+
+
+# Poll briefly: this turn's final text block may not be flushed yet.
+deadline = time.monotonic() + 3.0
+text = current_turn_text()
+while not text and time.monotonic() < deadline:
+    time.sleep(0.1)
+    text = current_turn_text()
+print(text)
 PY
 )"
 

@@ -5,7 +5,7 @@
 # Wire this in ~/.claude/settings.json under PostToolUse:
 #   { "matcher": "Edit|Write|NotebookEdit|MultiEdit|Bash", "hooks": [
 #       { "type": "command",
-#         "command": "/home/jackgorman/Desktop/Claude_Projects/computerVoice/step_hook.sh" } ] }
+#         "command": "/home/jackgorman/Desktop/Claude_Projects/computerVoice (copy)/step_hook.sh" } ] }
 #
 # Toggleable from the LCARS GUI (NARRATION pill) — when
 # narrate_during_build is false in ~/.majel_config.json, this exits
