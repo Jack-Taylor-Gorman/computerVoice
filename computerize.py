@@ -14,6 +14,8 @@ import hashlib
 import json
 import os
 import re
+
+import pronounce
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -636,6 +638,8 @@ def _post_process(text: str) -> str:
     text = _expand_build_numbers(text)
     text = _expand_acronyms(text)
     text = _disambiguate_heteronyms(text)
+    # Spoken dots in names and vowel respellings; see pronounce.py.
+    text = pronounce.apply(text)
     return text
 
 

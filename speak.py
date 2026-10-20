@@ -15,6 +15,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 DAEMON_SOCK = "/tmp/majel.sock"          # RVC daemon (legacy backend).
@@ -429,6 +430,16 @@ def main() -> int:
                         f.write(f"skip: stale utterance (token={req_token} "
                                 f"superseded by {current})\n")
                 return 0
+        except OSError:
+            pass
+
+    # Record which session is being spoken about, and when, so other tools
+    # can tell this summary apart from navigation that came after it (buddy's
+    # headset Play/Pause goes to the last-summarised session only if the user
+    # hasn't moved to another chat since).
+    if req_file:
+        try:
+            Path("/tmp/majel_spoke.json").write_text(json.dumps({"req_file": req_file, "time": time.time()}))
         except OSError:
             pass
 

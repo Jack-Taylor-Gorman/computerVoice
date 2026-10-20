@@ -19,6 +19,8 @@ Env:
 from __future__ import annotations
 
 import json
+
+import pronounce
 import os
 import socket
 import sys
@@ -88,7 +90,9 @@ def handle(conn: socket.socket, f5: F5TTS) -> None:
         # silence, producing a gibberish tail. Tail-completeness is
         # instead enforced by the post-generation ffmpeg apad below
         # which appends real PCM silence to the output WAV.
-        gen_text = text
+        # Every caller gets the same pronunciation fixes (buddy's readouts
+        # don't pass through computerize.py); applying them twice is harmless.
+        gen_text = pronounce.apply(text)
         if not gen_text.endswith((".", "!", "?")):
             gen_text += "."
         with _lock:
