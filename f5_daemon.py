@@ -36,9 +36,11 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-SOCK_PATH = "/tmp/majel_f5.sock"
-LOCK_PATH = "/tmp/majel_f5_daemon.lock"
-WORKER = ROOT / "f5_worker.py"
+# Overridable only so the lifecycle can be tested on a private socket with a
+# stand-in worker; callers hardcode the default socket path.
+SOCK_PATH = os.environ.get("MAJEL_F5_SOCK", "/tmp/majel_f5.sock")
+LOCK_PATH = SOCK_PATH.removesuffix(".sock") + "_daemon.lock"
+WORKER = Path(os.environ.get("MAJEL_F5_WORKER", ROOT / "f5_worker.py"))
 
 IDLE_S = float(os.environ.get("MAJEL_F5_IDLE_S", "600"))
 PREWARM = os.environ.get("MAJEL_F5_PREWARM") == "1"
@@ -167,7 +169,6 @@ class Worker:
                 self._kill()
         finally:
             self.lock.release()
-
 
 
 def handle(conn: socket.socket, worker: Worker) -> None:

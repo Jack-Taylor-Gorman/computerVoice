@@ -17,17 +17,23 @@
       SIGTERM/SIGKILL teardown.
 - [x] `user_prompt.sh` sends a fire-and-forget warm request so the reply
       doesn't wait for a cold start.
+- [x] Idle unload, warm restart and SIGTERM verified with a stand-in worker
+      on a private socket.
 
 ## Next
 
-1. **Verify the idle unload in the live service.** The worker last served a
-   request at 12:45:17 and should be stopped by about 12:55:25, leaving
-   front RSS around 12 MB and no `f5_worker.py` in `nvidia-smi`. If it was
-   already checked, record the result in `LEAN_REPORT.md`.
-2. **Verify the warm-up hook end to end.** Run `user_prompt.sh` from the
-   unloaded state (`echo '{}' | bash user_prompt.sh`; it beeps). Confirm the
-   log shows the worker starting, and that a request about 3 s later takes
-   warm latency.
+1. **Observe the live 600 s unload.** It was verified only with a stand-in
+   worker, because real traffic kept resetting the live timer. Check
+   `grep "unloading model" /tmp/majel_f5_daemon.log`, and confirm the front's
+   RSS is around 12 MB and that `nvidia-smi` lists no `f5_worker.py`. The
+   live front was started before the `MAJEL_F5_SOCK`/`MAJEL_F5_WORKER`
+   overrides were added; with defaults the code is identical, and the next
+   session start picks up the new file.
+2. **Warm-up hook end to end from the unloaded state.** The snippet was
+   checked against the live socket while the worker was loaded (rc 0). Once
+   the worker is unloaded, run `echo '{}' | bash user_prompt.sh` (it beeps),
+   confirm the log shows `worker pid=... starting`, and confirm a request
+   about 3 s later takes warm latency.
 3. Bonus: active RSS. The worker uses 1.87 GB, against a floor of about
    1.05 GB for torch and CUDA. Look at what the remaining ~0.8 GB is (cuDNN
    workspace, kernel images, the CPU heap) and whether

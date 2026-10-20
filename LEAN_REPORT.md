@@ -9,9 +9,15 @@ after ten idle minutes (`MAJEL_F5_IDLE_S`, default 600). The first three
 targets are met on measurement: the idle footprint is 12 MB of RSS with no
 VRAM, a cold first utterance takes 3.5–3.9 s end to end, and warm latency is
 unchanged. The fourth target (same voice) holds by construction, because the
-weights are bit-identical, and all transcripts match. The automatic idle
-unload after 600 s was still being verified when this section was written;
-see `LEAN_TODO.md`.
+weights are bit-identical, and all transcripts match.
+
+The idle-unload logic was verified with the real front driving a stand-in
+worker on a private socket (`MAJEL_F5_SOCK`, `MAJEL_F5_WORKER`,
+`MAJEL_F5_IDLE_S=15`). The worker was stopped cleanly after 15 idle seconds,
+and a later warm request restarted it. The 600 s unload has **not yet been
+observed on the live service**. Other Claude sessions spoke eight times
+between 12:45 and 12:57, each resetting the timer, and with only 2.2 GB of
+RAM free a second model copy for a separate test was ruled out.
 
 ## Numbers
 
